@@ -1,0 +1,40 @@
+{
+  "project_info": {
+    "project_number": "180202585087",
+    "firebase_url": "https://absenin-ad98f.firebaseio.com",
+    "project_id": "absenin-ad98f",
+    "storage_bucket": "absenin-ad98f.appspot.com"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:180202585087:android:268ff74b01f31f4d8405ca",
+        "android_client_info": {
+          "package_name": "com.example.absenin"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "180202585087-7olf1lqondnm0a2q0dfdshh05u4nqcno.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDz8dtJAIjW45u66D2OcF_o4qH4MY3Cxv0"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "180202585087-7olf1lqondnm0a2q0dfdshh05u4nqcno.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
