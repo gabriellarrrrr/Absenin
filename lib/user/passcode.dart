@@ -15,7 +15,11 @@ class PasscodeUser extends StatefulWidget {
   final String email, id, outlet;
   final int action;
   const PasscodeUser(
-      {Key key, @required this.email, @required this.action, @required this.outlet, this.id})
+      {Key key,
+      @required this.email,
+      @required this.action,
+      @required this.outlet,
+      this.id})
       : super(key: key);
   @override
   State<StatefulWidget> createState() {
@@ -39,7 +43,8 @@ class PasscodeState extends State<PasscodeUser> {
   @override
   void initState() {
     getDataUserFromPref();
-    errorController = StreamController<ErrorAnimationType>();
+    errorController =
+        StreamController<ErrorAnimationType>(); //streamcontroller - jalan terus
     errorController.add(ErrorAnimationType.shake);
     super.initState();
     _checkVibrate();
@@ -47,6 +52,7 @@ class PasscodeState extends State<PasscodeUser> {
 
   @override
   void dispose() {
+    //digunakan untuk streamcontroller stop
     errorController.close();
     super.dispose();
   }
@@ -60,15 +66,19 @@ class PasscodeState extends State<PasscodeUser> {
   }
 
   Future<FirebaseUser> signIn(String email, String passcode) async {
+    //future itu sama kyk fungsi
     SharedPreferences prefs = await SharedPreferences.getInstance();
     try {
       FirebaseUser user = (await auth.signInWithEmailAndPassword(
-              email: email, password: passcode))
+              email: email,
+              password:
+                  passcode)) //method signinwithemailandpsswd digunakan ketika sudah pernah sign in
           .user;
       assert(user != null);
       assert(await user.getIdToken() != null);
 
-      final FirebaseUser currentUser = await auth.currentUser();
+      final FirebaseUser currentUser = await auth
+          .currentUser(); //auth sdh berhasil login dan auth != null -> login berhasil
       if (user.uid == currentUser.uid) {
         prefs.setString('outletUser', widget.outlet);
         Navigator.of(context).pushAndRemoveUntil(
@@ -92,10 +102,13 @@ class PasscodeState extends State<PasscodeUser> {
   }
 
   void registerAuth() async {
+    //ketika posisi dr enrol dan berhasil membuat passcode baru
     SharedPreferences prefs = await SharedPreferences.getInstance();
     try {
       FirebaseUser user = (await auth.createUserWithEmailAndPassword(
-              email: widget.email, password: passcode))
+              email: widget.email,
+              password:
+                  passcode)) //method createuserwithemailand passcode mendaftarakan user ke auth
           .user;
 
       assert(user != null);
@@ -103,11 +116,16 @@ class PasscodeState extends State<PasscodeUser> {
 
       final FirebaseUser currentUser = await auth.currentUser();
       if (user.uid == currentUser.uid) {
-        await fs.collection('user')
-          .document(widget.outlet)
-          .collection('listuser')
-          .document(widget.id).updateData(
-            {'passcode': passcode, 'status': true, 'isSignin': true});
+        await fs
+            .collection('user')
+            .document(widget.outlet)
+            .collection('listuser')
+            .document(widget.id)
+            .updateData({
+          'passcode': passcode,
+          'status': true,
+          'isSignin': true
+        }); //status untuk cek dia sudah pernah login apa blm, isSignin untuk keamanan
         if (mounted) {
           prefs.setString('outletUser', widget.outlet);
           Navigator.of(context).pushAndRemoveUntil(
@@ -120,12 +138,15 @@ class PasscodeState extends State<PasscodeUser> {
   }
 
   void updatePasscodeAuth() async {
+    //ketika posisi dari detail staff mau rubah passcode aksi = 30
     FirebaseUser currentUser = await auth.currentUser();
     currentUser.updatePassword(passcode).then((_) async {
-      await fs.collection('user')
-      .document(widget.outlet)
-      .collection('listuser')
-      .document(widget.id).updateData({
+      await fs
+          .collection('user')
+          .document(widget.outlet)
+          .collection('listuser')
+          .document(widget.id)
+          .updateData({
         'passcode': passcode,
       });
       if (mounted) {
@@ -166,7 +187,7 @@ class PasscodeState extends State<PasscodeUser> {
   @override
   Widget build(BuildContext context) {
     return GestureDetector(
-      onTap: (){
+      onTap: () {
         FocusScope.of(context).requestFocus(new FocusNode());
       },
       child: Scaffold(
@@ -271,7 +292,8 @@ class PasscodeState extends State<PasscodeUser> {
                     height: 30,
                   ),
                   Padding(
-                    padding: EdgeInsets.symmetric(vertical: 8.0, horizontal: 30),
+                    padding:
+                        EdgeInsets.symmetric(vertical: 8.0, horizontal: 30),
                     child: PinCodeTextField(
                       length: 6,
                       obsecureText: false,
@@ -318,9 +340,9 @@ class PasscodeState extends State<PasscodeUser> {
                                 passcode = value;
                                 _load = true;
                                 if (widget.action == 30) {
-                                  updatePasscodeAuth();
+                                  updatePasscodeAuth(); //30 update
                                 } else {
-                                  registerAuth();
+                                  registerAuth(); //20 register
                                 }
                               });
                             } else {
@@ -333,7 +355,6 @@ class PasscodeState extends State<PasscodeUser> {
                               if (_canVibrate) {
                                 Vibrate.feedback(FeedbackType.error);
                               }
-                              // invisibleErrorMessage();
                             }
                           }
                         }
@@ -381,7 +402,7 @@ class PasscodeState extends State<PasscodeUser> {
                         ],
                       ),
                     ),
-                  if (reenter)
+                  if (reenter && !_load)
                     FlatButton(
                       onPressed: () {
                         setState(() {

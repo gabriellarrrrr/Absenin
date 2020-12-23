@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:absenin/user/passcode.dart';
 import 'package:absenin/user/photoview.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_icons/flutter_icons.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
@@ -17,7 +18,6 @@ class ProfileUser extends StatefulWidget {
 }
 
 class ProfileState extends State<ProfileUser> {
-  
   final GlobalKey<ScaffoldState> _scaffoldKey = new GlobalKey<ScaffoldState>();
   final PanelController _panelController = new PanelController();
   StreamController<ErrorAnimationType> errorController;
@@ -74,11 +74,8 @@ class ProfileState extends State<ProfileUser> {
 
   _showNotif() async {
     var androidPlatformChannelSpecifics = new AndroidNotificationDetails(
-        '1.0',
-        'Absenin',
-        'Reminder Notification',
-        importance: Importance.Max,
-        priority: Priority.High);
+        '1.0', 'Absenin', 'Reminder Notification',
+        importance: Importance.Max, priority: Priority.High);
     var iOSPlatformChannelSpecifics = new IOSNotificationDetails();
     NotificationDetails platformChannelSpecifics = new NotificationDetails(
         androidPlatformChannelSpecifics, iOSPlatformChannelSpecifics);
@@ -219,13 +216,26 @@ class ProfileState extends State<ProfileUser> {
                       child: Column(
                         children: <Widget>[
                           GestureDetector(
-                              onTap: () {
-                                Navigator.push(
+                              onTap: () async {
+                                SharedPreferences prefs =
+                                    await SharedPreferences.getInstance();
+                                final result = await Navigator.push(
                                     context,
                                     MaterialPageRoute(
                                         builder: (context) => PhotoPage(
                                               urlImg: img,
+                                              id: id,
+                                              outlet: outlet,
+                                              nama: name,
                                             )));
+                                if (result != null) {
+                                  if (result != 'null') {
+                                    setState(() {
+                                      img = result;
+                                      prefs.setString('imgUser', result);
+                                    });
+                                  }
+                                }
                               },
                               child: Hero(
                                 tag: 'photo',
@@ -235,14 +245,21 @@ class ProfileState extends State<ProfileUser> {
                                       shape: BoxShape.circle,
                                       color: Theme.of(context).dividerColor),
                                   child: ClipOval(
-                                      child: FadeInImage.assetNetwork(
-                                    placeholder: 'assets/images/absenin.png',
-                                    height: 100.0,
-                                    width: 100.0,
-                                    image: img,
-                                    fadeInDuration: Duration(seconds: 1),
-                                    fit: BoxFit.cover,
-                                  )),
+                                    child: CachedNetworkImage(
+                                      imageUrl: img,
+                                      height: 100.0,
+                                      width: 100.0,
+                                      fit: BoxFit.cover,
+                                    ),
+                                    //     FadeInImage.assetNetwork(
+                                    //   placeholder: 'assets/images/absenin.png',
+                                    //   height: 100.0,
+                                    //   width: 100.0,
+                                    //   image: img,
+                                    //   fadeInDuration: Duration(seconds: 1),
+                                    //   fit: BoxFit.cover,
+                                    // )
+                                  ),
                                 ),
                               )),
                           SizedBox(
@@ -448,7 +465,7 @@ class ProfileState extends State<ProfileUser> {
                               onTap: () {
                                 setState(() {
                                   notif = !notif;
-                                  if(notif){
+                                  if (notif) {
                                     _showNotif();
                                   }
                                 });
@@ -482,7 +499,7 @@ class ProfileState extends State<ProfileUser> {
                                   onChanged: (value) {
                                     setState(() {
                                       notif = value;
-                                      if(value){
+                                      if (value) {
                                         _showNotif();
                                       }
                                     });
@@ -554,13 +571,17 @@ class ProfileState extends State<ProfileUser> {
                 ),
               ),
             )),
-        onWillPop: _onBackPressed);
-  }
-
-  Future<bool> _onBackPressed() {
-    return _panelController.isPanelOpen
-        ? _panelController.close()
-        : Navigator.pop(context);
+        onWillPop: () async {
+          bool exit = false;
+          if (_panelController.isPanelOpen) {
+            setState(() {
+              _panelController.close();
+            });
+          } else {
+            exit = true;
+          }
+          return exit;
+        });
   }
 
   Route _createRoute(Widget destination) {

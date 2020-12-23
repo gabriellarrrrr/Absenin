@@ -73,6 +73,12 @@ class PermissionState extends State<MakePermission> {
     }
   }
 
+  @override
+  void dispose() {
+    explanController.dispose();
+    super.dispose();
+  }
+
   void getDataUserFromPref() async {
     SharedPreferences prefs = await SharedPreferences.getInstance();
     setState(() {
@@ -84,27 +90,29 @@ class PermissionState extends State<MakePermission> {
   }
 
   void getJumlahCuti() async {
-    await firestore.collection('user')
-      .document(outlet)
-      .collection('listuser')
-      .document(id)
-      .collection('${DateTime.now().year}')
-      .document('count')
-      .get()
-      .then((snapshot){
-        if(snapshot.exists){
-          setState(() {
-            cutiCount = snapshot.data['dayOff'];
-          });
-        }
-      });
+    await firestore
+        .collection('user')
+        .document(outlet)
+        .collection('listuser')
+        .document(id)
+        .collection('${DateTime.now().year}')
+        .document('count')
+        .get()
+        .then((snapshot) {
+      if (snapshot.exists) {
+        setState(() {
+          cutiCount = snapshot.data['dayOff'];
+        });
+      }
+    });
   }
 
   void savePermission() async {
-    await firestore.collection('permission')
-    .document(outlet)
-    .collection('listpermission')
-    .add({
+    await firestore
+        .collection('permission')
+        .document(outlet)
+        .collection('listpermission')
+        .add({
       'type': _type,
       'startdate': _startdate,
       'enddate': _enddate,
@@ -121,14 +129,15 @@ class PermissionState extends State<MakePermission> {
       showCenterShortToast();
       Navigator.pop(context, true);
     }
-    
   }
 
   void updatePermission() async {
-    await firestore.collection('permission')
-    .document(outlet)
-    .collection('listpermission')
-    .document(widget.id).updateData({
+    await firestore
+        .collection('permission')
+        .document(outlet)
+        .collection('listpermission')
+        .document(widget.id)
+        .updateData({
       'type': _type,
       'startdate': _startdate,
       'enddate': _enddate,
@@ -613,7 +622,7 @@ class PermissionState extends State<MakePermission> {
                               child: TextFormField(
                                 controller: explanController,
                                 onSaved: (value) {
-                                  _explanation = value;
+                                  explanController.text = value;
                                 },
                                 decoration: InputDecoration(
                                   hintText: 'Enter your explanation',
@@ -706,8 +715,8 @@ class PermissionState extends State<MakePermission> {
                             FocusScope.of(context)
                                 .requestFocus(new FocusNode());
                             if (widget.action == 10) {
-                              if(_type.toLowerCase() == 'cuti'){
-                                if(cutiCount<9){
+                              if (_type.toLowerCase() == 'cuti') {
+                                if (cutiCount < 9) {
                                   _prosesDialog();
                                   _uploadImageToFirebase();
                                 } else {

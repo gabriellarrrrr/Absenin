@@ -60,7 +60,7 @@ class ListPermissionState extends State<ListPermission> {
   }
 
   void getPermission() async {
-      db
+    db
         .collection('permission')
         .document(outlet)
         .collection('listpermission')
@@ -69,6 +69,7 @@ class ListPermissionState extends State<ListPermission> {
         .snapshots()
         .listen((snapshot) {
       snapshot.documents.forEach((f) {
+        listpermission.clear();
         Timestamp submitted = f.data['submitted'];
         Timestamp checked = f.data['checked'];
         PermissionItem item = new PermissionItem(
@@ -98,10 +99,12 @@ class ListPermissionState extends State<ListPermission> {
   }
 
   void deletePermission(String id, String path) async {
-    await db.collection('permission')
-    .document(outlet)
-    .collection('listpermission')
-    .document(id).delete();
+    await db
+        .collection('permission')
+        .document(outlet)
+        .collection('listpermission')
+        .document(id)
+        .delete();
     if (mounted) {
       deleteFile(path);
     }

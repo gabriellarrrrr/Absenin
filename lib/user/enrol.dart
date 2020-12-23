@@ -11,7 +11,11 @@ class EnrollKey extends StatefulWidget {
   final String email, enrol, outlet, id;
 
   const EnrollKey(
-      {Key key, @required this.email, @required this.enrol, @required this.outlet, @required this.id})
+      {Key key,
+      @required this.email,
+      @required this.enrol,
+      @required this.outlet,
+      @required this.id})
       : super(key: key);
   @override
   State<StatefulWidget> createState() {
@@ -23,7 +27,7 @@ class EnrollKeyState extends State<EnrollKey> {
   StreamController<ErrorAnimationType> errorController;
   TextEditingController textEditingController = TextEditingController();
   String message = '';
-  bool _canVibrate = true;
+  bool _canVibrate = false;
 
   @override
   void initState() {
@@ -35,6 +39,7 @@ class EnrollKeyState extends State<EnrollKey> {
 
   @override
   void dispose() {
+    textEditingController.dispose();
     errorController.close();
     super.dispose();
   }
@@ -159,8 +164,8 @@ class EnrollKeyState extends State<EnrollKey> {
                     activeColor: Theme.of(context).accentColor,
                     inactiveColor: Theme.of(context).dividerColor,
                     fieldWidth: 40,
-                    errorAnimationController: errorController,
-                    controller: textEditingController,
+                    errorAnimationController: errorController, //error
+                    controller: textEditingController, //nampung inputan
                     textInputType: TextInputType.text,
                     textCapitalization: TextCapitalization.characters,
                     textStyle: TextStyle(
@@ -172,18 +177,21 @@ class EnrollKeyState extends State<EnrollKey> {
                         fontFamily: 'Google',
                         fontWeight: FontWeight.bold),
                     onCompleted: (value) {
+                      //ketika sudah keisi ditampung di variabel value
                       if (value == widget.enrol.toUpperCase()) {
                         print('Enrol Diterima');
                         Navigator.of(context)
                             .pushReplacement(_createRoute(PasscodeUser(
                           email: widget.email,
-                          action: 20,
+                          action: 20, //aksi create passcode baru
                           outlet: widget.outlet,
                           id: widget.id,
                         )));
                       } else {
-                        textEditingController.text = '';
-                        errorController.add(ErrorAnimationType.shake);
+                        textEditingController.text =
+                            ''; //di kosongin karena gak sesuai
+                        errorController
+                            .add(ErrorAnimationType.shake); //efek goyang
                         setState(() {
                           message = 'Enrol salah!';
                         });
@@ -191,7 +199,6 @@ class EnrollKeyState extends State<EnrollKey> {
                         if (_canVibrate) {
                           Vibrate.feedback(FeedbackType.error);
                         }
-                        // invisibleErrorMessage();
                       }
                     },
                     onChanged: (value) {

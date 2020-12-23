@@ -1,12 +1,14 @@
 import 'dart:async';
 import 'package:absenin/anim/FadeUp.dart';
 import 'package:absenin/login.dart';
+import 'package:absenin/user/help.dart';
 import 'package:absenin/user/history.dart';
 import 'package:absenin/user/map.dart';
 import 'package:absenin/user/permission.dart';
 import 'package:absenin/user/profile.dart';
 import 'package:absenin/user/reminder.dart';
 import 'package:absenin/user/schedule.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:content_placeholder/content_placeholder.dart';
 import 'package:device_info/device_info.dart';
@@ -19,6 +21,7 @@ import 'package:flutter_vant_kit/widgets/steps.dart';
 import 'package:flutter_vibrate/flutter_vibrate.dart';
 import 'package:intl/intl.dart';
 import 'package:package_info/package_info.dart';
+import 'package:pull_to_refresh/pull_to_refresh.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sliding_up_panel/sliding_up_panel.dart';
 import 'package:jiffy/jiffy.dart';
@@ -31,10 +34,16 @@ class HomePage extends StatefulWidget {
 }
 
 class OverviewSchedule {
+  //untuk getter and setter -> class model schedule, objek
   final DateTime date, startTime, endTime, switchDate;
   final String shift, pos;
-  final int lateTime, type;
-  DateTime clockinTime, breakTime, afterbreakTime, overtimeinTime;
+  int lateTime, type;
+  DateTime clockinTime,
+      breakTime,
+      afterbreakTime,
+      clockoutTime,
+      overtimeinTime,
+      overtimeoutTime;
   bool isClockIn,
       isBreak,
       isAfterBreak,
@@ -71,10 +80,19 @@ class OverviewSchedule {
       this.clockinTime,
       this.breakTime,
       this.afterbreakTime,
-      this.overtimeinTime);
+      this.clockoutTime,
+      this.overtimeinTime,
+      this.overtimeoutTime);
+}
+
+class TodayCheck {
+  bool check, switchh;
+
+  TodayCheck(this.check, this.switchh);
 }
 
 class StaffItem {
+  //classmodel staff
   String id;
   String img;
   String name;
@@ -103,16 +121,43 @@ class StaffItem {
       this.clicked);
 }
 
-class HomePageState extends State<HomePage> {
+class OprationalItem {
+  String shift;
+  DateTime startfull,
+      endfull,
+      startpart,
+      endpart,
+      startfull2,
+      endfull2,
+      startpart2,
+      endpart2;
 
+  OprationalItem(
+      this.shift,
+      this.startfull,
+      this.endfull,
+      this.startpart,
+      this.endpart,
+      this.startfull2,
+      this.endfull2,
+      this.startpart2,
+      this.endpart2);
+}
+
+class HomePageState extends State<HomePage> {
   final GlobalKey<ScaffoldState> _scaffoldKey = new GlobalKey<ScaffoldState>();
   List<OverviewSchedule> listSchedule = new List<OverviewSchedule>();
+  List<OverviewSchedule> listScheduleTemp = new List<OverviewSchedule>();
+  List<TodayCheck> listToday = new List<TodayCheck>();
   FlutterLocalNotificationsPlugin flutterLocalNotificationsPlugin;
   DeviceInfoPlugin deviceInfo = DeviceInfoPlugin();
   final PanelController _panelController = new PanelController();
+  RefreshController _refreshController =
+      RefreshController(initialRefresh: false);
+
   final searchController = TextEditingController();
   double _radiusPanel = 0.0;
-  bool collaps = true;
+  bool collaps = true, noOperational = false;
   double minHeight = 0;
   String searchQuery;
   // int _active = -1;
@@ -145,78 +190,175 @@ class HomePageState extends State<HomePage> {
   DateFormat dateFormat = DateFormat.yMMMMEEEEd();
   DateFormat timeFormat = DateFormat.Hm();
 
-  List listJadwal = ['Shift 1', 'Shift 2', 'Lembur', 'Jaga Malam'];
+  List<OprationalItem> listJadwal = new List<OprationalItem>();
   List<StaffItem> listStaff = new List<StaffItem>();
   List listTampung = new List();
   String monthNow;
+  bool status = false;
+  DateTime _dateTimeServer;
 
   final Firestore firestore = Firestore.instance;
   final FirebaseAuth auth = FirebaseAuth.instance;
 
-  void saveSwitchData(int index) async {
+  @override
+  void initState() {
+    super.initState();
+    var initializationSettingsAndroid =
+        new AndroidInitializationSettings('@mipmap/ic_launcher');
+    var initializationSettingsIOS = new IOSInitializationSettings();
+    var initializationSettings = new InitializationSettings(
+        initializationSettingsAndroid, initializationSettingsIOS);
+    flutterLocalNotificationsPlugin = new FlutterLocalNotificationsPlugin();
+    flutterLocalNotificationsPlugin
+        .initialize(initializationSettings); //atur setting notif
+    TodayCheck item = new TodayCheck(false, false);
+    TodayCheck item1 = new TodayCheck(false, false);
+    listToday.add(item);
+    listToday.add(item1);
+    getUser();
+    _checkVibrate();
+    _getAppInfo();
+    _getDeviceInfo();
+  }
+
+  void getOprationalSchedule() async {
+    print('OUTLET => $outlet');
     await firestore
-      .collection('switchschedule')
-      .document('Dazzle Gejayan')
-      .collection('listswitch')
-      .add({
-      'datefrom': listSchedule[indexList].date,
-      'shiftfrom': listSchedule[indexList].shift,
-      'from': id,
-      'dateto': DateTime.now(),
-      'shiftto': '-',
-      'to': listStaff[index].id,
-      'toAcc' : false,
-      'status': 0,
-      'checked': DateTime.now(),
-      'posFrom': listSchedule[indexList].pos,
-      'posTo' : '-'
-    }).then((data) async {
-      await firestore
-        .collection('user')
-        .document('Dazzle Gejayan')
-        .collection('listuser')
-        .document(listStaff[index].id)
-        .collection('${DateTime.now().year}')
-        .document('request')
-        .setData({
-          'switch' : true,
-          'from' : id,
-          'shift' : listSchedule[indexList].shift,
-          'date' : listSchedule[indexList].date,
-          'id' : data.documentID
-        });
-      if(mounted){
-        await firestore
-          .collection('schedule')
-          .document('Dazzle Gejayan')
-          .collection('scheduledetail')
-          .document('${listSchedule[indexList].date.year}')
-          .collection('${listSchedule[indexList].date.month}')
-          .document('${listSchedule[indexList].shift}')
-          .collection('listday')
-          .document('${listSchedule[indexList].date.day}')
-          .collection('liststaff')
-          .document(id)
-          .updateData({'switch': true});
-        if (mounted) {
-          setState(() {
-            listSchedule[indexList].isSwitch = true;
-            listStaff[index].check = true;
-            listStaff[index].clicked = false;
-            if (collaps) {
-              _panelController.open();
-              setState(() {
-                collaps = false;
+        .collection('outlet')
+        .where('name', isEqualTo: outlet)
+        .getDocuments()
+        .then((snapshot) {
+      if (snapshot.documents.isNotEmpty) {
+        listJadwal.clear();
+        snapshot.documents.forEach((k) async {
+          print('DOCUMENT ID => ${k.documentID}');
+          await firestore
+              .collection('outlet')
+              .document(k.documentID)
+              .collection('oprational')
+              .getDocuments()
+              .then((snapshot2) {
+            if (snapshot2.documents.isNotEmpty) {
+              snapshot2.documents.forEach((f) {
+                Timestamp startfull = f.data['startfull'];
+                Timestamp endfull = f.data['endfull'];
+                Timestamp startpart = f.data['startpart'];
+                Timestamp endpart = f.data['endpart'];
+                Timestamp startfull2 = f.data['startfull2'];
+                Timestamp endfull2 = f.data['endfull2'];
+                Timestamp startpart2 = f.data['startpart2'];
+                Timestamp endpart2 = f.data['endpart2'];
+                OprationalItem item = new OprationalItem(
+                    f.data['name'],
+                    startfull.toDate(),
+                    endfull.toDate(),
+                    startpart.toDate(),
+                    endpart.toDate(),
+                    startfull2.toDate(),
+                    endfull2.toDate(),
+                    startpart2.toDate(),
+                    endpart2.toDate());
+                setState(() {
+                  listJadwal.add(item);
+                });
               });
+              if (listJadwal.length > 0) {
+                print('DATA OPERATIONAL ADA => ${listJadwal.length}');
+              } else {
+                print('DATA OPERATIONAL TIDAK ADA');
+              }
+              getListSchedule();
             } else {
-              _panelController.close();
               setState(() {
-                collaps = true;
+                noOperational = true;
               });
+              _refreshController.refreshCompleted();
+            }
+          });
+        });
+      }
+    });
+  }
+
+  void saveSwitchData(int index) async {
+    firestore
+        .collection('timeserver')
+        .add({'time': FieldValue.serverTimestamp()}).then((value) {
+      firestore
+          .collection('timeserver')
+          .document(value.documentID)
+          .get()
+          .then((onValue) async {
+        if (onValue.exists) {
+          Timestamp timeServer = onValue.data['time'];
+          DateTime dateTimeServer = timeServer.toDate();
+          await firestore
+              .collection('switchschedule')
+              .document(outlet)
+              .collection('listswitch')
+              .add({
+            'datefrom': listSchedule[indexList].date,
+            'shiftfrom': listSchedule[indexList].shift,
+            'from': id,
+            'dateto': dateTimeServer,
+            'shiftto': '-',
+            'to': listStaff[index].id,
+            'toAcc': false,
+            'status': 0,
+            'checked': dateTimeServer,
+            'posFrom': listSchedule[indexList].pos,
+            'posTo': '-',
+            'toDayOff': false,
+          }).then((data) async {
+            await firestore
+                .collection('user')
+                .document(outlet)
+                .collection('listuser')
+                .document(listStaff[index].id)
+                .collection('${dateTimeServer.year}')
+                .document('request')
+                .setData({
+              'switch': true,
+              'from': id,
+              'shift': listSchedule[indexList].shift,
+              'date': listSchedule[indexList].date,
+              'id': data.documentID
+            });
+            if (mounted) {
+              await firestore
+                  .collection('schedule')
+                  .document(outlet)
+                  .collection('scheduledetail')
+                  .document('${listSchedule[indexList].date.year}')
+                  .collection('${listSchedule[indexList].date.month}')
+                  .document('${listSchedule[indexList].shift}')
+                  .collection('listday')
+                  .document('${listSchedule[indexList].date.day}')
+                  .collection('liststaff')
+                  .document(id)
+                  .updateData({'switch': true});
+              if (mounted) {
+                setState(() {
+                  listSchedule[indexList].isSwitch = true;
+                  listStaff[index].check = true;
+                  listStaff[index].clicked = false;
+                  if (collaps) {
+                    _panelController.open();
+                    setState(() {
+                      collaps = false;
+                    });
+                  } else {
+                    _panelController.close();
+                    setState(() {
+                      collaps = true;
+                    });
+                  }
+                });
+              }
             }
           });
         }
-      }
+      });
     });
   }
 
@@ -224,6 +366,7 @@ class HomePageState extends State<HomePage> {
     SharedPreferences prefs = await SharedPreferences.getInstance();
     FirebaseUser currentUser = await auth.currentUser();
     outlet = prefs.getString('outletUser');
+    print('OUTLET => $outlet');
     firestore
         .collection('user')
         .document(outlet)
@@ -233,7 +376,7 @@ class HomePageState extends State<HomePage> {
         .listen((data) {
       if (data.documents.isNotEmpty) {
         data.documents.forEach((f) {
-          setState(() {
+          setState(() async {
             id = f.documentID;
             name = f.data['name'];
             position = f.data['position'];
@@ -244,6 +387,7 @@ class HomePageState extends State<HomePage> {
             type = f.data['type'];
             role = f.data['role'];
             passcode = f.data['passcode'];
+            status = f.data['status'];
             prefs.setString('idUser', id);
             prefs.setString('namaUser', name);
             prefs.setString('positionUser', position);
@@ -254,7 +398,8 @@ class HomePageState extends State<HomePage> {
             prefs.setInt('typeUser', type);
             prefs.setInt('roleUser', role);
             prefs.setString('passcodeUser', passcode);
-            getListSchedule();
+            prefs.setBool('status', status);
+            getOprationalSchedule();
             getOutlet();
             getSwitchRequest(id);
           });
@@ -264,32 +409,47 @@ class HomePageState extends State<HomePage> {
   }
 
   void getSwitchRequest(String id) async {
-    await firestore
-        .collection('user')
-        .document(outlet)
-        .collection('listuser')
-        .document(id)
-        .collection('${DateTime.now().year}')
-        .document('request')
-        .get()
-        .then((snapshot) async {
-          if(snapshot.exists){
-            if(snapshot.data['switch']){
-              Timestamp date = snapshot.data['date'];
-              await firestore
-                .collection('user')
-                .document(outlet)
-                .collection('listuser')
-                .document(snapshot.data['from'])
-                .get()
-                .then((value){
-                  if(value.exists){
-                    _showSwitchRequestDialog(value.data['name'], date.toDate(), snapshot.data['id']);
+    firestore
+        .collection('timeserver')
+        .add({'time': FieldValue.serverTimestamp()}).then((value) {
+      firestore
+          .collection('timeserver')
+          .document(value.documentID)
+          .get()
+          .then((onValue) async {
+        if (onValue.exists) {
+          Timestamp timeServer = onValue.data['time'];
+          DateTime dateTimeServer = timeServer.toDate();
+          await firestore
+              .collection('user')
+              .document(outlet)
+              .collection('listuser')
+              .document(id)
+              .collection('${dateTimeServer.year}')
+              .document('request')
+              .get()
+              .then((snapshot) async {
+            if (snapshot.exists) {
+              if (snapshot.data['switch']) {
+                Timestamp date = snapshot.data['date'];
+                await firestore
+                    .collection('user')
+                    .document(outlet)
+                    .collection('listuser')
+                    .document(snapshot.data['from'])
+                    .get()
+                    .then((value) {
+                  if (value.exists) {
+                    _showSwitchRequestDialog(
+                        value.data['name'], date.toDate(), snapshot.data['id']);
                   }
                 });
+              }
             }
-          }
-        });
+          });
+        }
+      });
+    });
   }
 
   void getOutlet() async {
@@ -301,6 +461,7 @@ class HomePageState extends State<HomePage> {
         .listen((data) {
       if (data.documents.isNotEmpty) {
         data.documents.forEach((f) {
+          prefs.setInt('radius', f.data['radius']);
           prefs.setDouble('latitude', f.data['latitude']);
           prefs.setDouble('longtitude', f.data['longtitude']);
         });
@@ -308,268 +469,317 @@ class HomePageState extends State<HomePage> {
     });
   }
 
+  _onRefresh() async {
+    if (noOperational) {
+      setState(() {
+        noOperational = false;
+      });
+      getOprationalSchedule();
+    } else {
+      listSchedule.clear();
+      listToday.clear();
+      TodayCheck item = new TodayCheck(false, false);
+      TodayCheck item1 = new TodayCheck(false, false);
+      listToday.add(item);
+      listToday.add(item1);
+      getListSchedule();
+      getSwitchRequest(id);
+    }
+  }
+
   Future<void> getListSchedule() async {
-    DateTime dateTime = DateTime.now();
-    for (int i = 0; i < 2; i++) {
-      await firestore
-          .collection('schedule')
-          .document(outlet)
-          .collection('scheduledetail')
-          .document('${dateTime.year}')
-          .collection('${dateTime.month}')
-          .document('Shift 1')
-          .collection('listday')
-          .document('${dateTime.day + i}')
-          .collection('liststaff')
-          .document(id)
+    firestore
+        .collection('timeserver')
+        .add({'time': FieldValue.serverTimestamp()}).then((value) {
+      firestore
+          .collection('timeserver')
+          .document(value.documentID)
           .get()
-          .then((snapshoot) async {
-        if (snapshoot.exists) {
-          Timestamp switchDate = snapshoot.data['switchDate'];
-          Timestamp clockinTime = snapshoot.data['clockin'];
-          Timestamp breakTime = snapshoot.data['break'];
-          Timestamp afterbreakTime = snapshoot.data['afterbreak'];
-          Timestamp overtimeinTime = snapshoot.data['overtimein'];
-          bool isClockIn = snapshoot.data['isClockIn'];
-          bool isBreak = snapshoot.data['isBreak'];
-          bool isAfterBreak = snapshoot.data['isAfterBreak'];
-          bool isClockOut = snapshoot.data['isClockOut'];
-          bool isOverTime = snapshoot.data['isOvertime'];
-          bool isOverTimeIn = snapshoot.data['isOvertimeIn'];
-          bool isOverTimeOut = snapshoot.data['isOvertimeOut'];
-          bool isPermit = snapshoot.data['permit'];
-          bool isSwitch = snapshoot.data['switch'];
-          int isSwitchAcc = snapshoot.data['switchAcc'];
-          int lateTime = snapshoot.data['late'];
-          int type = snapshoot.data['type'];
-          String pos = snapshoot.data['pos'];
-          int active = -1;
-          if (isClockIn) {
-            active = 0;
-          }
-          if (isBreak) {
-            active = 1;
-          }
-          if (isAfterBreak) {
-            active = 2;
-          }
-          if (isClockOut) {
-            active = 3;
-          }
-          if (isOverTimeIn){
-            active = 4;
-          }
-          if (isOverTimeOut) {
-            active = 5;
-          }
-
-          await firestore
-              .collection('schedule')
-              .document(outlet)
-              .collection('scheduledetail')
-              .document('${dateTime.year}')
-              .collection('${dateTime.month}')
-              .document('Shift 1')
-              .collection('listday')
-              .document('${dateTime.day + i}')
-              .get()
-              .then((snapshoots) {
-            if (snapshoots.exists) {
-              bool isOff = false;
-              Timestamp start, end;
-              if (type == 1) {
-                start = snapshoots.data['fullstart'];
-                end = snapshoots.data['fullend'];
-              } else {
-                start = snapshoots.data['partstart'];
-                end = snapshoots.data['partend'];
-              }
-              OverviewSchedule item = new OverviewSchedule(
-                Jiffy().add(days: i),
-                start.toDate(),
-                end.toDate(),
-                'Shift 1',
-                pos,
-                lateTime,
-                type,
-                isClockIn,
-                isBreak,
-                isAfterBreak,
-                isClockOut,
-                isOverTime,
-                isOverTimeIn,
-                isOverTimeOut,
-                isOff,
-                isPermit,
-                isSwitch,
-                isSwitchAcc,
-                switchDate.toDate(),
-                active,
-                clockinTime.toDate(),
-                breakTime.toDate(),
-                afterbreakTime.toDate(),
-                overtimeinTime.toDate());
-              setState(() {
-                listSchedule.add(item);
-                if(i == 0){
-                  if(!isClockIn && !isPermit && isSwitchAcc != 1 && !isOff){
-                    _setClockInNotifMin15(start.toDate());
-                  }
-                }
-              });
-            } else {
-              print('Details empty!');
-            }
+          .then((onValue) async {
+        if (onValue.exists) {
+          Timestamp timeServer = onValue.data['time'];
+          DateTime dateTimeServer = timeServer.toDate();
+          setState(() {
+            _dateTimeServer = dateTimeServer;
           });
-        } else {
-          await firestore
-              .collection('schedule')
-              .document(outlet)
-              .collection('scheduledetail')
-              .document('${dateTime.year}')
-              .collection('${dateTime.month}')
-              .document('Shift 2')
-              .collection('listday')
-              .document('${dateTime.day + i}')
-              .collection('liststaff')
-              .document(id)
-              .get()
-              .then((snapshoot) async {
-            if (snapshoot.exists) {
-              Timestamp switchDate = snapshoot.data['switchDate'];
-              Timestamp clockinTime = snapshoot.data['clockin'];
-              Timestamp breakTime = snapshoot.data['break'];
-              Timestamp afterbreakTime = snapshoot.data['afterbreak'];
-              Timestamp overtimeinTime = snapshoot.data['overtimein'];
-              bool isClockIn = snapshoot.data['isClockIn'];
-              bool isBreak = snapshoot.data['isBreak'];
-              bool isAfterBreak = snapshoot.data['isAfterBreak'];
-              bool isClockOut = snapshoot.data['isClockOut'];
-              bool isOverTime = snapshoot.data['isOvertime'];
-              bool isOverTimeIn = snapshoot.data['isOvertimeIn'];
-              bool isOverTimeOut = snapshoot.data['isOvertimeOut'];
-              bool isPermit = snapshoot.data['permit'];
-              bool isSwitch = snapshoot.data['switch'];
-              int isSwitchAcc = snapshoot.data['switchAcc'];
-              int lateTime = snapshoot.data['late'];
-              int type = snapshoot.data['type'];
-              String pos = snapshoot.data['pos'];
-              int active = -1;
-              if (isClockIn) {
-                active = 0;
-              }
-              if (isBreak) {
-                active = 1;
-              }
-              if (isAfterBreak) {
-                active = 2;
-              }
-              if (isClockOut) {
-                active = 3;
-              }
-              if (isOverTimeIn){
-                active = 4;
-              }
-              if (isOverTimeOut) {
-                active = 5;
-              }
-
-              await firestore
-                  .collection('schedule')
-                  .document(outlet)
-                  .collection('scheduledetail')
-                  .document('${dateTime.year}')
-                  .collection('${dateTime.month}')
-                  .document('Shift 2')
-                  .collection('listday')
-                  .document('${dateTime.day + i}')
-                  .get()
-                  .then((snapshoots) {
-                if (snapshoots.exists) {
-                  bool isOff = false;
-                  Timestamp start, end;
-                  if (type == 1) {
-                    start = snapshoots.data['fullstart'];
-                    end = snapshoots.data['fullend'];
-                  } else {
-                    start = snapshoots.data['partstart'];
-                    end = snapshoots.data['partend'];
-                  }
-                  OverviewSchedule item = new OverviewSchedule(
-                      Jiffy().add(days: i),
-                      start.toDate(),
-                      end.toDate(),
-                      'Shift 2',
-                      pos,
-                      lateTime,
-                      type,
-                      isClockIn,
-                      isBreak,
-                      isAfterBreak,
-                      isClockOut,
-                      isOverTime,
-                      isOverTimeIn,
-                      isOverTimeOut,
-                      isOff,
-                      isPermit,
-                      isSwitch,
-                      isSwitchAcc,
-                      switchDate.toDate(),
-                      active,
-                      clockinTime.toDate(),
-                      breakTime.toDate(),
-                      afterbreakTime.toDate(),
-                      overtimeinTime.toDate());
-                  setState(() {
-                    listSchedule.add(item);
-                    if(i == 0){
-                      if(!isClockIn && !isPermit && isSwitchAcc != 1 && !isOff){
-                        _setClockInNotifMin15(start.toDate());
-                      }
+          for (int i = 0; i < 2; i++) {
+            if(i != 0){
+              dateTimeServer = Jiffy(dateTimeServer).add(days: 1);
+            }
+            for (int j = 0; j < listJadwal.length; j++) {
+              print(
+                  'MENGAMBIL DATA TANGGAL ${dateTimeServer.day} / ${listJadwal[j].shift}');
+              if (!listToday[i].check) {
+                await firestore
+                    .collection('schedule')
+                    .document(outlet)
+                    .collection('scheduledetail')
+                    .document('${dateTimeServer.year}')
+                    .collection('${dateTimeServer.month}')
+                    .document('${listJadwal[j].shift}')
+                    .collection('listday')
+                    .document('${dateTimeServer.day}')
+                    .collection('liststaff')
+                    .document(id)
+                    .get()
+                    .then((snapshoot) async {
+                  if (snapshoot.exists) {
+                    Timestamp switchDate = snapshoot.data['switchDate'];
+                    Timestamp clockinTime = snapshoot.data['clockin'];
+                    Timestamp breakTime = snapshoot.data['break'];
+                    Timestamp afterbreakTime = snapshoot.data['afterbreak'];
+                    Timestamp clockoutTime = snapshoot.data['clockout'];
+                    Timestamp overtimeinTime = snapshoot.data['overtimein'];
+                    Timestamp overtimeoutTime = snapshoot.data['overtimeout'];
+                    bool isClockIn = snapshoot.data['isClockIn'];
+                    bool isOtherTime = snapshoot.data['otherTime'];
+                    bool isBreak = snapshoot.data['isBreak'];
+                    bool isAfterBreak = snapshoot.data['isAfterBreak'];
+                    bool isClockOut = snapshoot.data['isClockOut'];
+                    bool isOverTime = snapshoot.data['isOvertime'];
+                    bool isOverTimeIn = snapshoot.data['isOvertimeIn'];
+                    bool isOverTimeOut = snapshoot.data['isOvertimeOut'];
+                    bool isPermit = snapshoot.data['permit'];
+                    bool isSwitch = snapshoot.data['switch'];
+                    int isSwitchAcc = snapshoot.data['switchAcc'];
+                    int lateTime = snapshoot.data['late'];
+                    int type = snapshoot.data['type'];
+                    String pos = snapshoot.data['pos'];
+                    int active = -1;
+                    if (isClockIn) {
+                      active = 0;
                     }
-                  });
-                } else {
-                  print('Details empty!');
-                }
-              });
-            } else {
-              print('No Schedule For You!');
-              OverviewSchedule item = new OverviewSchedule(
-                  Jiffy().add(days: i),
-                  DateTime.now(),
-                  DateTime.now(),
-                  '-',
-                  '-',
-                  0,
-                  0,
-                  false,
-                  false,
-                  false,
-                  false,
-                  false,
-                  false,
-                  false,
-                  true,
-                  false,
-                  false,
-                  0,
-                  DateTime.now(),
-                  -1,
-                  DateTime.now(),
-                  DateTime.now(),
-                  DateTime.now(),
-                  DateTime.now());
-              setState(() {
-                listSchedule.add(item);
-              });
+                    if (isBreak) {
+                      active = 1;
+                    }
+                    if (isAfterBreak) {
+                      active = 2;
+                    }
+                    if (isClockOut) {
+                      active = 3;
+                    }
+                    if (isOverTimeIn) {
+                      active = 4;
+                    }
+                    if (isOverTimeOut) {
+                      active = 5;
+                    }
+
+                    if (isSwitchAcc == 1) {
+                      await firestore
+                          .collection('schedule')
+                          .document(outlet)
+                          .collection('scheduledetail')
+                          .document('${dateTimeServer.year}')
+                          .collection('${dateTimeServer.month}')
+                          .document('${listJadwal[j].shift}')
+                          .collection('listday')
+                          .document('${dateTimeServer.day}')
+                          .get()
+                          .then((snapshoots) {
+                        if (snapshoots.exists) {
+                          bool isOff = false;
+                          Timestamp start, end;
+                          if (type == 1) {
+                            if (isOtherTime) {
+                              start = snapshoots.data['fullstart2'];
+                              end = snapshoots.data['fullend2'];
+                            } else {
+                              start = snapshoots.data['fullstart'];
+                              end = snapshoots.data['fullend'];
+                            }
+                          } else {
+                            if (isOtherTime) {
+                              start = snapshoots.data['partstart2'];
+                              end = snapshoots.data['partend2'];
+                            } else {
+                              start = snapshoots.data['partstart'];
+                              end = snapshoots.data['partend'];
+                            }
+                          }
+                          OverviewSchedule item = new OverviewSchedule(
+                              dateTimeServer,
+                              start.toDate(),
+                              end.toDate(),
+                              '${listJadwal[j].shift}',
+                              pos,
+                              lateTime,
+                              type,
+                              isClockIn,
+                              isBreak,
+                              isAfterBreak,
+                              isClockOut,
+                              isOverTime,
+                              isOverTimeIn,
+                              isOverTimeOut,
+                              isOff,
+                              isPermit,
+                              isSwitch,
+                              isSwitchAcc,
+                              switchDate.toDate(),
+                              active,
+                              clockinTime.toDate(),
+                              breakTime.toDate(),
+                              afterbreakTime.toDate(),
+                              clockoutTime.toDate(),
+                              overtimeinTime.toDate(),
+                              overtimeoutTime.toDate());
+                          setState(() {
+                            if(listJadwal.length > 1){
+                              listToday[i].switchh = true;
+                              listScheduleTemp.add(item);
+                            } else {
+                              listToday[i].check = true;
+                              listToday[i].switchh = false;
+                              listSchedule.add(item);
+                            }
+                            print(
+                                'ADA JADWAL TANGGAL ${dateTimeServer.day} / ${listJadwal[j].shift} ');
+                          });
+                        } else {
+                          print('Details empty!');
+                        }
+                      });
+                    } else {
+                      await firestore
+                          .collection('schedule')
+                          .document(outlet)
+                          .collection('scheduledetail')
+                          .document('${dateTimeServer.year}')
+                          .collection('${dateTimeServer.month}')
+                          .document('${listJadwal[j].shift}')
+                          .collection('listday')
+                          .document('${dateTimeServer.day}')
+                          .get()
+                          .then((snapshoots) {
+                        if (snapshoots.exists) {
+                          bool isOff = false;
+                          Timestamp start, end;
+                          if (type == 1) {
+                            if (isOtherTime) {
+                              start = snapshoots.data['fullstart2'];
+                              end = snapshoots.data['fullend2'];
+                            } else {
+                              start = snapshoots.data['fullstart'];
+                              end = snapshoots.data['fullend'];
+                            }
+                          } else {
+                            if (isOtherTime) {
+                              start = snapshoots.data['partstart2'];
+                              end = snapshoots.data['partend2'];
+                            } else {
+                              start = snapshoots.data['partstart'];
+                              end = snapshoots.data['partend'];
+                            }
+                          }
+                          OverviewSchedule item = new OverviewSchedule(
+                              dateTimeServer,
+                              start.toDate(),
+                              end.toDate(),
+                              '${listJadwal[j].shift}',
+                              pos,
+                              lateTime,
+                              type,
+                              isClockIn,
+                              isBreak,
+                              isAfterBreak,
+                              isClockOut,
+                              isOverTime,
+                              isOverTimeIn,
+                              isOverTimeOut,
+                              isOff,
+                              isPermit,
+                              isSwitch,
+                              isSwitchAcc,
+                              switchDate.toDate(),
+                              active,
+                              clockinTime.toDate(),
+                              breakTime.toDate(),
+                              afterbreakTime.toDate(),
+                              clockoutTime.toDate(),
+                              overtimeinTime.toDate(),
+                              overtimeoutTime.toDate());
+                          setState(() {
+                            listToday[i].check = true;
+                            listToday[i].switchh = false;
+                            listSchedule.add(item);
+                            print(
+                                'ADA JADWAL TANGGAL ${dateTimeServer.day} / ${listJadwal[j].shift} ');
+                            if (i == 0) {
+                              if (!isClockIn &&
+                                  !isPermit &&
+                                  isSwitchAcc != 1 &&
+                                  !isOff) {
+                                _setClockInNotifMin15(start.toDate());
+                              }
+                            }
+                          });
+                        } else {
+                          print('Details empty!');
+                        }
+                      });
+                    }
+                  } else {
+                    if (j == listJadwal.length - 1 &&
+                        !listToday[i].check &&
+                        listToday[i].switchh) {
+                      setState(() {
+                        listToday[i].check = true;
+                        listToday[i].switchh = false;
+                        listSchedule.add(listScheduleTemp[0]);
+                        listScheduleTemp.clear();
+                        print(
+                            'TANGGAL ${dateTimeServer.day} : ${listJadwal[j].shift} TIDAK ADA JADWAL');
+                      });
+                    } else if (j == listJadwal.length - 1 &&
+                        !listToday[i].check) {
+                      print('No Schedule For You!');
+                      OverviewSchedule item = new OverviewSchedule(
+                          dateTimeServer,
+                          dateTimeServer,
+                          dateTimeServer,
+                          '-',
+                          '-',
+                          0,
+                          0,
+                          false,
+                          false,
+                          false,
+                          false,
+                          false,
+                          false,
+                          false,
+                          true,
+                          false,
+                          false,
+                          0,
+                          dateTimeServer,
+                          -1,
+                          dateTimeServer,
+                          dateTimeServer,
+                          dateTimeServer,
+                          dateTimeServer,
+                          dateTimeServer,
+                          dateTimeServer);
+                      setState(() {
+                        listToday[i].check = true;
+                        listSchedule.add(item);
+                        print(
+                            'TANGGAL ${dateTimeServer.day} : ${listJadwal[j].shift} TIDAK ADA JADWAL');
+                      });
+                    }
+                  }
+                });
+              } else {
+                print('${listJadwal[j].shift} DI SKIP');
+              }
             }
-          });
+          }
         }
       });
-    }
-    if (!listSchedule[1].isPermit || !listSchedule[1].isSwitch) {
-      getStaff();
-    }
+    });
+    _refreshController.refreshCompleted();
+    getStaff();
   }
 
   void getStaff() async {
@@ -577,58 +787,40 @@ class HomePageState extends State<HomePage> {
         .collection('user')
         .document(outlet)
         .collection('listuser')
-        .where('outlet', isEqualTo: outlet)
-        .where('role', isEqualTo: 1)
         .getDocuments()
         .then((QuerySnapshot snapshot) {
-      snapshot.documents.forEach((f) {
-        if (f.documentID != id) {
-          StaffItem item = new StaffItem(
-              f.documentID,
-              f.data['img'],
-              f.data['name'],
-              f.data['position'],
-              f.data['type'],
-              false,
-              f.data['phone'],
-              f.data['address'],
-              f.data['email'],
-              f.data['outlet'],
-              f.data['enrol'],
-              false);
-          setState(() {
-            listStaff.add(item);
-          });
-        }
-      });
+      if (snapshot.documents.isNotEmpty) {
+        listStaff.clear();
+        snapshot.documents.forEach((f) {
+          if (f.documentID != id) {
+            StaffItem item = new StaffItem(
+                f.documentID,
+                f.data['img'],
+                f.data['name'],
+                f.data['position'],
+                f.data['type'],
+                false,
+                f.data['phone'],
+                f.data['address'],
+                f.data['email'],
+                f.data['outlet'],
+                f.data['enrol'],
+                false);
+            setState(() {
+              listStaff.add(item);
+            });
+          }
+        });
+      }
     });
-  }
-
-  @override
-  void initState() {
-    super.initState();
-    var initializationSettingsAndroid =
-        new AndroidInitializationSettings('@mipmap/ic_launcher');
-    var initializationSettingsIOS = new IOSInitializationSettings();
-    var initializationSettings = new InitializationSettings(
-        initializationSettingsAndroid, initializationSettingsIOS);
-    flutterLocalNotificationsPlugin = new FlutterLocalNotificationsPlugin();
-    flutterLocalNotificationsPlugin.initialize(initializationSettings);
-    getUser();
-    _checkVibrate();
-    _getAppInfo();
-    _getDeviceInfo();
   }
 
   _setClockInNotifMin15(DateTime dateTime) async {
     DateTime date = Jiffy(dateTime).subtract(minutes: 15);
     var time = Time(date.hour, date.minute, date.second);
     var androidPlatformChannelSpecifics = new AndroidNotificationDetails(
-        '10',
-        'Clock In 15',
-        '15 Minutes',
-        importance: Importance.Max,
-        priority: Priority.High);
+        '10', 'Clock In 15', '15 Minutes',
+        importance: Importance.Max, priority: Priority.High);
     var iOSPlatformChannelSpecifics = new IOSNotificationDetails();
     NotificationDetails platformChannelSpecifics = new NotificationDetails(
         androidPlatformChannelSpecifics, iOSPlatformChannelSpecifics);
@@ -643,11 +835,8 @@ class HomePageState extends State<HomePage> {
   _setAfterBreak15(DateTime dateTime) async {
     DateTime date = Jiffy(dateTime).subtract(minutes: 15);
     var androidPlatformChannelSpecifics = new AndroidNotificationDetails(
-        '20',
-        'After Break 15',
-        '15 Minutes',
-        importance: Importance.Max,
-        priority: Priority.High);
+        '20', 'After Break 15', '15 Minutes',
+        importance: Importance.Max, priority: Priority.High);
     var iOSPlatformChannelSpecifics = new IOSNotificationDetails();
     NotificationDetails platformChannelSpecifics = new NotificationDetails(
         androidPlatformChannelSpecifics, iOSPlatformChannelSpecifics);
@@ -662,11 +851,8 @@ class HomePageState extends State<HomePage> {
   _setClockOut15(DateTime dateTime) async {
     DateTime date = Jiffy(dateTime).subtract(minutes: 15);
     var androidPlatformChannelSpecifics = new AndroidNotificationDetails(
-        '30',
-        'Clock Out 15',
-        '15 Minutes',
-        importance: Importance.Max,
-        priority: Priority.High);
+        '30', 'Clock Out 15', '15 Minutes',
+        importance: Importance.Max, priority: Priority.High);
     var iOSPlatformChannelSpecifics = new IOSNotificationDetails();
     NotificationDetails platformChannelSpecifics = new NotificationDetails(
         androidPlatformChannelSpecifics, iOSPlatformChannelSpecifics);
@@ -683,199 +869,118 @@ class HomePageState extends State<HomePage> {
       listSchedule[index]._active++;
       if (listSchedule[index]._active == 3 && !listSchedule[index].isOverTime ||
           listSchedule[index]._active == 5 && listSchedule[index].isOverTime) {
+        //posisi 3 = clockout && posisi 5 = ovtout
         Timer(Duration(milliseconds: 300), () {
-          _showAlertDialog('Hi, $name', 'Your work finished, Thank you.', 10, index);
+          _showAlertDialog(
+              'Hi, $name', 'Your work finished, Thank you.', 10, index);
         });
       }
-      if(listSchedule[index]._active == 2){
+      if (listSchedule[index]._active == 2) {
         _setClockOut15(listSchedule[index].endTime);
       }
     });
   }
 
   _checkTimeNow(int index, String shift, int action) async {
-    DateTime dateTime = DateTime.now();
     DateFormat year = DateFormat.y();
     DateFormat month = DateFormat.M();
     DateFormat day = DateFormat.d();
-    DateFormat hourFormat = DateFormat.H();
     if (action == 10) {
-      DateTime longBreak = Jiffy(dateTime).add(minutes: 60);
       _prosesDialog();
-      await firestore
-          .collection('schedule')
-          .document('Dazzle Gejayan')
-          .collection('scheduledetail')
-          .document(year.format(dateTime))
-          .collection(month.format(dateTime))
-          .document(shift)
-          .collection('listday')
-          .document(day.format(dateTime))
-          .collection('liststaff')
-          .document(id)
-          .updateData({
-        'break': DateTime.now(),
-        'isBreak': true,
-      });
-      if (mounted) {
-        Navigator.pop(context);
-        listSchedule[index].breakTime = DateTime.now();
-        listSchedule[index].isBreak = true;
-        _stepCounter(index);
-        _setAfterBreak15(longBreak);
-      }
-    } else if (action == 20) {
-      int hourNow = int.tryParse(hourFormat.format(dateTime));
-      if (hourNow >= 16) {
-        _prosesDialog();
-        await firestore
-            .collection('schedule')
-            .document('Dazzle Gejayan')
-            .collection('scheduledetail')
-            .document(year.format(dateTime))
-            .collection(month.format(dateTime))
-            .document(shift)
-            .collection('listday')
-            .document(day.format(dateTime))
-            .collection('liststaff')
-            .document(id)
-            .updateData({
-          'clockout': DateTime.now(),
-          'isClockOut': true,
-        });
-        if (mounted) {
-          listSchedule[index].isClockOut = true;
-          if(!listSchedule[index].isOverTime){
-            await firestore.collection('history')
-              .document('Dazzle Gejayan')
-              .collection('listhistory')
-              .document('${DateTime.now().year}')
-              .collection(id)
-              .document('${DateTime.now().month}')
-              .collection('listhistory')
-              .add({
-                'date' : listSchedule[index].date,
-                'shift' : listSchedule[index].shift,
-                'start' : listSchedule[index].startTime,
-                'end' : listSchedule[index].endTime,
-                'late' : listSchedule[index].lateTime,
-                'pos' : listSchedule[index].pos
-              });
-            if(mounted){
-              Navigator.pop(context);
-              setState(() {
-                listSchedule[index].isClockOut = true;
-                _stepCounter(index);
-              });
-            }
-            int dayintotaltime = DateTime.now().difference(listSchedule[index].clockinTime).inMinutes;
-            int breaktotaltime = listSchedule[index].afterbreakTime.difference(listSchedule[index].breakTime).inMinutes;
-            int lateday = 0;
-            if(listSchedule[index].lateTime > 0){
-              lateday = 1;
-            }
+      firestore
+          .collection('timeserver')
+          .add({'time': FieldValue.serverTimestamp()}).then((value) {
+        firestore
+            .collection('timeserver')
+            .document(value.documentID)
+            .get()
+            .then((onValue) async {
+          if (onValue.exists) {
+            Timestamp timeServer = onValue.data['time'];
+            DateTime dateTimeServer = timeServer.toDate();
             await firestore
-              .collection('report')
-              .document('Dazzle Gejayan')
-              .collection('listreport')
-              .document('${DateTime.now().year}')
-              .collection('${DateTime.now().month}')
-              .document(id)
-              .collection('listreport')
-              .add({
-                'name' : name,
-                'dayin' : 1,
-                'dayintotaltime' : dayintotaltime,
-                'totalbreaktime' : breaktotaltime,
-                'overtimeday' : 0,
-                'overtimetotaltime' : 0,
-                'lateday' : lateday,
-                'latetotaltime' : listSchedule[index].lateTime, 
-                'date' : listSchedule[index].date
-              });
-          } else {
-            Navigator.pop(context);
-            setState(() {
-              listSchedule[index].isClockOut = true;
-              _stepCounter(index);
+                .collection('schedule')
+                .document(outlet)
+                .collection('scheduledetail')
+                .document(year.format(dateTimeServer))
+                .collection(month.format(dateTimeServer))
+                .document(shift)
+                .collection('listday')
+                .document(day.format(dateTimeServer))
+                .collection('liststaff')
+                .document(id)
+                .updateData({
+              'break': dateTimeServer,
+              'isBreak': true,
             });
+            if (mounted) {
+              Navigator.pop(context);
+              DateTime longBreak = Jiffy(dateTimeServer).add(minutes: 60);
+              listSchedule[index].breakTime = dateTimeServer;
+              listSchedule[index].isBreak = true;
+              _stepCounter(index);
+              _setAfterBreak15(longBreak);
+            }
           }
-        }
-      } else {
-        _showAlertDialog(
-            'Attention', "You can't clockout now! clockout start at 16:00 PM", 10, index);
-        if (_canVibrate) {
-          Vibrate.feedback(FeedbackType.warning);
-        }
-      }
-    } else if (action == 30) {
-      _prosesDialog();
-      await firestore
-          .collection('schedule')
-          .document('Dazzle Gejayan')
-          .collection('scheduledetail')
-          .document(year.format(dateTime))
-          .collection(month.format(dateTime))
-          .document(shift)
-          .collection('listday')
-          .document(day.format(dateTime))
-          .collection('liststaff')
-          .document(id)
-          .updateData({
-        'overtimeout': DateTime.now(),
-        'isOvertimeOut': true,
+        });
       });
-      if (mounted) {
-        listSchedule[index].isOverTimeOut = true;
-        await firestore.collection('history')
-          .document('Dazzle Gejayan')
-          .collection('listhistory')
-          .document('${DateTime.now().year}')
-          .collection(id)
-          .document('${DateTime.now().month}')
-          .collection('listhistory')
-          .add({
-            'date' : listSchedule[index].date,
-            'shift' : listSchedule[index].shift,
-            'start' : listSchedule[index].startTime,
-            'end' : listSchedule[index].endTime,
-            'late' : listSchedule[index].lateTime,
-            'pos' : listSchedule[index].pos
-          });
-        if(mounted){
-          Navigator.pop(context);
-          setState(() {
-            listSchedule[index].isOverTimeOut = true;
-            _stepCounter(index);
-          });
-        }
-        int dayintotaltime = DateTime.now().difference(listSchedule[index].clockinTime).inMinutes;
-        int breaktotaltime = listSchedule[index].afterbreakTime.difference(listSchedule[index].breakTime).inMinutes;
-        int lateday = 0;
-        if(listSchedule[index].lateTime > 0){
-          lateday = 1;
-        }
-        int overtimetotaltime = DateTime.now().difference(listSchedule[index].overtimeinTime).inMinutes;
-        await firestore
-          .collection('report')
-          .document('Dazzle Gejayan')
-          .collection('listreport')
-          .document('${DateTime.now().year}')
-          .collection('${DateTime.now().month}')
-          .document(id)
-          .collection('listreport')
-          .add({
-            'name' : name,
-            'dayin' : 1,
-            'dayintotaltime' : dayintotaltime,
-            'totalbreaktime' : breaktotaltime,
-            'overtimeday' : 1,
-            'overtimetotaltime' : overtimetotaltime,
-            'lateday' : lateday,
-            'latetotaltime' : listSchedule[index].lateTime, 
-            'date' : listSchedule[index].date
-          });
-      }
+    } else if (action == 20) {
+      firestore
+          .collection('timeserver')
+          .add({'time': FieldValue.serverTimestamp()}).then((value) {
+        firestore
+            .collection('timeserver')
+            .document(value.documentID)
+            .get()
+            .then((onValue) async {
+          if (onValue.exists) {
+            Timestamp timeServer = onValue.data['time'];
+            DateTime dateTimeServer = timeServer.toDate();
+            if (dateTimeServer.hour >= listSchedule[index].endTime.hour &&
+                dateTimeServer.minute >= listSchedule[index].endTime.minute) {
+              if (listSchedule[index].isOverTime) {
+                //cek lembur apa nggak
+                _prosesDialog();
+                await firestore
+                    .collection('schedule')
+                    .document(outlet)
+                    .collection('scheduledetail')
+                    .document(year.format(dateTimeServer))
+                    .collection(month.format(dateTimeServer))
+                    .document(shift)
+                    .collection('listday')
+                    .document(day.format(dateTimeServer))
+                    .collection('liststaff')
+                    .document(id)
+                    .updateData({
+                  'clockout': dateTimeServer,
+                  'isClockOut': true,
+                });
+                if (mounted) {
+                  listSchedule[index].isClockOut = true;
+                  listSchedule[index].clockoutTime = dateTimeServer;
+                  Navigator.pop(context);
+                  setState(() {
+                    _stepCounter(index);
+                  });
+                }
+              } else {
+                _gotoMapsPage(40, listSchedule[index].shift, index,
+                    DateTime.now()); //ini kalau gak lembur
+              }
+            } else {
+              _showAlertDialog(
+                  'Attention',
+                  "You can't clockout now! clockout start at ${listSchedule[index].endTime.hour}:${listSchedule[index].endTime.minute} WIB",
+                  10,
+                  index);
+              if (_canVibrate) {
+                Vibrate.feedback(FeedbackType.warning);
+              }
+            }
+          }
+        });
+      });
     }
   }
 
@@ -905,7 +1010,8 @@ class HomePageState extends State<HomePage> {
     });
   }
 
-  void _showReminderDialog(DateTime date, DateTime startTime, DateTime endTime, String shift) {
+  void _showReminderDialog(
+      DateTime date, DateTime startTime, DateTime endTime, String shift) {
     showDialog(
         context: context,
         barrierDismissible: true,
@@ -959,7 +1065,8 @@ class HomePageState extends State<HomePage> {
                       child: FlatButton(
                         onPressed: () {
                           Navigator.pop(context);
-                          _gotoReminderPage(20, date, startTime, endTime, shift);
+                          _gotoReminderPage(
+                              20, date, startTime, endTime, shift);
                         },
                         child: Text(
                           'Edit Reminder',
@@ -981,7 +1088,8 @@ class HomePageState extends State<HomePage> {
                           Navigator.pop(context);
                           setState(() async {
                             isReminder = false;
-                            SharedPreferences prefs = await SharedPreferences.getInstance();
+                            SharedPreferences prefs =
+                                await SharedPreferences.getInstance();
                             prefs.setBool('isReminder', false);
                             prefs.setString('dateReminder', '-');
                             prefs.setString('timeReminder', '-');
@@ -1194,15 +1302,13 @@ class HomePageState extends State<HomePage> {
                       height: 20,
                     ),
                     Padding(
-                      padding: const EdgeInsets.only(
-                          left: 20, right: 20),
+                      padding: const EdgeInsets.only(left: 20, right: 20),
                       child: Align(
                         alignment: Alignment.topLeft,
                         child: Text(
                           '$name request switch schedule on ${dateFormat.format(date)}',
                           style: TextStyle(
-                              color:
-                                  Theme.of(context).textTheme.caption.color,
+                              color: Theme.of(context).textTheme.caption.color,
                               fontFamily: 'Sans',
                               fontSize:
                                   Theme.of(context).textTheme.body1.fontSize),
@@ -1221,7 +1327,10 @@ class HomePageState extends State<HomePage> {
                       child: FlatButton(
                         onPressed: () {
                           Navigator.pop(context);
-                          Navigator.of(context).push(_createRoute(ScheduleTime(action: 20, id: id,)));
+                          Navigator.of(context).push(_createRoute(ScheduleTime(
+                            action: 20,
+                            id: id,
+                          )));
                         },
                         child: Text(
                           'Choose schedule',
@@ -1283,31 +1392,28 @@ class HomePageState extends State<HomePage> {
                         ],
                       ),
                     ),
-                    if(action == 20)
-                    Divider(
-                      height: 0.0,
-                    ),
-                    if(action == 20)
-                    SizedBox(
-                      width: MediaQuery.of(context).size.width,
-                      height: 50,
-                      child: FlatButton(
-                        onPressed: () {
-                          Navigator.pop(context);
-                          _checkTimeNow(
-                            index,
-                            listSchedule[index].shift,
-                            10);
-                        },
-                        child: Text(
-                          'Yes',
-                          style: TextStyle(
-                              fontFamily: 'Google',
-                              fontWeight: FontWeight.bold,
-                              color: Theme.of(context).accentColor),
+                    if (action == 20)
+                      Divider(
+                        height: 0.0,
+                      ),
+                    if (action == 20)
+                      SizedBox(
+                        width: MediaQuery.of(context).size.width,
+                        height: 50,
+                        child: FlatButton(
+                          onPressed: () {
+                            Navigator.pop(context);
+                            _checkTimeNow(index, listSchedule[index].shift, 10);
+                          },
+                          child: Text(
+                            'Yes',
+                            style: TextStyle(
+                                fontFamily: 'Google',
+                                fontWeight: FontWeight.bold,
+                                color: Theme.of(context).accentColor),
+                          ),
                         ),
                       ),
-                    ),
                     Divider(
                       height: 0.0,
                     ),
@@ -1347,27 +1453,177 @@ class HomePageState extends State<HomePage> {
       shift: shift,
       timeSet: timeSet,
     )));
-    if (result != null && result != false) {
-      setState(() {
-        if (_action == 10) {
-          listSchedule[index].isClockIn = true;
-          listSchedule[index].clockinTime = DateTime.now();
-        } else if(_action == 20){
-          listSchedule[index].isAfterBreak = true;
-          listSchedule[index].afterbreakTime = DateTime.now();
-        } else {
-          listSchedule[index].isOverTimeIn = true;
-          listSchedule[index].overtimeinTime = DateTime.now();
-        }
-        _stepCounter(index);
+    if (result != null) {
+      _stepCounter(index);
+      firestore
+          .collection('timeserver')
+          .add({'time': FieldValue.serverTimestamp()}).then((value) {
+        firestore
+            .collection('timeserver')
+            .document(value.documentID)
+            .get()
+            .then((onValue) async {
+          if (onValue.exists) {
+            Timestamp timeServer = onValue.data['time'];
+            DateTime dateTimeServer = timeServer.toDate();
+            if (_action == 10) {
+              setState(() {
+                listSchedule[index].isClockIn = true;
+                listSchedule[index].clockinTime = dateTimeServer;
+                listSchedule[index].lateTime = result;
+              });
+            } else if (_action == 20 && result != false) {
+              setState(() {
+                listSchedule[index].isAfterBreak = true;
+                listSchedule[index].afterbreakTime = dateTimeServer;
+              });
+            } else if (_action == 30 && result != false) {
+              setState(() {
+                listSchedule[index].isOverTimeIn = true;
+                listSchedule[index].overtimeinTime = dateTimeServer;
+              });
+            } else if (_action == 40 && result != false) {
+              setState(() {
+                listSchedule[index].isClockOut = true;
+                listSchedule[index].clockoutTime = dateTimeServer;
+              });
+              if (!listSchedule[index].isOverTime) {
+                await firestore
+                    .collection('history')
+                    .document(outlet)
+                    .collection('listhistory')
+                    .document('${dateTimeServer.year}')
+                    .collection(id)
+                    .document('${dateTimeServer.month}')
+                    .collection('listhistory')
+                    .add({
+                  'date': listSchedule[index].date,
+                  'shift': listSchedule[index].shift,
+                  'start': listSchedule[index].startTime,
+                  'end': listSchedule[index].endTime,
+                  'late': listSchedule[index].lateTime,
+                  'pos': listSchedule[index].pos
+                });
+                int dayintotaltime = dateTimeServer
+                    .difference(listSchedule[index].clockinTime)
+                    .inMinutes;
+                int breaktotaltime = listSchedule[index]
+                    .afterbreakTime
+                    .difference(listSchedule[index].breakTime)
+                    .inMinutes;
+                int lateday = 0;
+                if (listSchedule[index].lateTime > 0) {
+                  lateday = 1;
+                }
+                await firestore
+                    .collection('report')
+                    .document(outlet)
+                    .collection('listreport')
+                    .document('${dateTimeServer.year}')
+                    .collection('${dateTimeServer.month}')
+                    .document(id)
+                    .collection('listreport')
+                    .add({
+                  'id': id,
+                  'name': name,
+                  'shift': listSchedule[index].shift,
+                  'pos': listSchedule[index].pos,
+                  'dayin': 1,
+                  'dayintotaltime': dayintotaltime,
+                  'totalbreaktime': breaktotaltime,
+                  'overtimeday': 0,
+                  'overtimetotaltime': 0,
+                  'lateday': lateday,
+                  'latetotaltime': listSchedule[index].lateTime,
+                  'date': listSchedule[index].date,
+                  'clockin': listSchedule[index].clockinTime,
+                  'break': listSchedule[index].breakTime,
+                  'afterbreak': listSchedule[index].afterbreakTime,
+                  'clockout': listSchedule[index].clockoutTime,
+                  'overtimein': '-',
+                  'overtimeout': '-',
+                });
+              }
+            } else {
+              setState(() {
+                listSchedule[index].isOverTimeOut = true;
+                listSchedule[index].overtimeoutTime = dateTimeServer;
+              });
+              await firestore
+                  .collection('history')
+                  .document(outlet)
+                  .collection('listhistory')
+                  .document('${dateTimeServer.year}')
+                  .collection(id)
+                  .document('${dateTimeServer.month}')
+                  .collection('listhistory')
+                  .add({
+                'date': listSchedule[index].date,
+                'shift': listSchedule[index].shift,
+                'start': listSchedule[index].startTime,
+                'end': listSchedule[index].endTime,
+                'late': listSchedule[index].lateTime,
+                'pos': listSchedule[index].pos
+              });
+              int dayintotaltime = dateTimeServer
+                  .difference(listSchedule[index].clockinTime)
+                  .inMinutes;
+              int breaktotaltime = listSchedule[index]
+                  .afterbreakTime
+                  .difference(listSchedule[index].breakTime)
+                  .inMinutes;
+              int lateday = 0;
+              if (listSchedule[index].lateTime > 0) {
+                lateday = 1;
+              }
+              int overtimetotaltime = dateTimeServer
+                  .difference(listSchedule[index].overtimeinTime)
+                  .inMinutes;
+              await firestore
+                  .collection('report')
+                  .document(outlet)
+                  .collection('listreport')
+                  .document('${dateTimeServer.year}')
+                  .collection('${dateTimeServer.month}')
+                  .document(id)
+                  .collection('listreport')
+                  .add({
+                'id': id,
+                'name': name,
+                'shift': listSchedule[index].shift,
+                'pos': listSchedule[index].pos,
+                'dayin': 1,
+                'dayintotaltime': dayintotaltime,
+                'totalbreaktime': breaktotaltime,
+                'overtimeday': 1,
+                'overtimetotaltime': overtimetotaltime,
+                'lateday': lateday,
+                'latetotaltime': listSchedule[index].lateTime,
+                'date': listSchedule[index].date,
+                'clockin': listSchedule[index].clockinTime,
+                'break': listSchedule[index].breakTime,
+                'afterbreak': listSchedule[index].afterbreakTime,
+                'clockout': listSchedule[index].clockoutTime,
+                'overtimein': listSchedule[index].overtimeinTime,
+                'overtimeout': listSchedule[index].overtimeoutTime,
+              });
+            }
+          }
+        });
       });
     }
   }
 
-  _gotoReminderPage(int action, DateTime date, DateTime startTime, DateTime endTime, String shift) async {
+  _gotoReminderPage(int action, DateTime date, DateTime startTime,
+      DateTime endTime, String shift) async {
     SharedPreferences prefs = await SharedPreferences.getInstance();
-    final result =
-        await Navigator.of(context).push(_createRoute(ReminderPage(action: action, date: date, startTime: startTime, endTime: endTime, shift: shift,)));
+    final result = await Navigator.of(context).push(_createRoute(ReminderPage(
+      action: action,
+      date: date,
+      startTime: startTime,
+      endTime: endTime,
+      shift: shift,
+    )));
     if (result != null && result != false) {
       setState(() {
         isReminder = prefs.getBool('isReminder');
@@ -1377,7 +1633,7 @@ class HomePageState extends State<HomePage> {
     }
   }
 
-  _getReminderSet(int index) async{
+  _getReminderSet(int index) async {
     SharedPreferences prefs = await SharedPreferences.getInstance();
     isReminder = prefs.getBool('isReminder');
     dateReminder = prefs.getString('dateReminder');
@@ -1385,13 +1641,20 @@ class HomePageState extends State<HomePage> {
     if (isReminder != null && isReminder) {
       DateTime date = DateFormat('yMd').parse(dateReminder);
       DateTime time = DateFormat('H:m').parse(timeReminder);
-      DateTime finalTime = DateTime(date.year, date.month, date.day, time.hour, time.minute);
+      DateTime finalTime =
+          DateTime(date.year, date.month, date.day, time.hour, time.minute);
       print(date.toString());
       print(time.toString());
       print(finalTime.toString());
-      _showReminderDialog(finalTime, listSchedule[index].startTime, listSchedule[index].endTime, listSchedule[index].shift);
+      _showReminderDialog(finalTime, listSchedule[index].startTime,
+          listSchedule[index].endTime, listSchedule[index].shift);
     } else {
-      _gotoReminderPage(10, listSchedule[index].date, listSchedule[index].startTime, listSchedule[index].endTime, listSchedule[index].shift);
+      _gotoReminderPage(
+          10,
+          listSchedule[index].date,
+          listSchedule[index].startTime,
+          listSchedule[index].endTime,
+          listSchedule[index].shift);
     }
   }
 
@@ -1552,7 +1815,9 @@ class HomePageState extends State<HomePage> {
                   ListTile(
                     onTap: () {
                       Navigator.pop(context);
-                      Navigator.of(context).push(_createRoute(ScheduleTime(action: 10,)));
+                      Navigator.of(context).push(_createRoute(ScheduleTime(
+                        action: 10,
+                      )));
                     },
                     leading: Icon(
                       Ionicons.md_calendar,
@@ -1615,12 +1880,9 @@ class HomePageState extends State<HomePage> {
                   ListTile(
                     onTap: () {
                       Navigator.pop(context);
-                      _prosesDialog();
-                      _signOutFromAuth();
-                      // Navigator.push(
-                      //     context,
-                      //     MaterialPageRoute(
-                      //         builder: (BuildContext context) => Help()));
+                      Navigator.of(context).push(_createRoute(Help()));
+                      // _prosesDialog();
+                      // _signOutFromAuth();
                     },
                     leading: Icon(
                       MaterialIcons.help,
@@ -1850,12 +2112,14 @@ class HomePageState extends State<HomePage> {
                                 child: FlatButton(
                                   onPressed: listStaff[index].check
                                       ? () {}
-                                      : !listStaff[index].clicked ? () {
-                                          setState(() {
-                                            listStaff[index].clicked = true;
-                                          });
-                                          saveSwitchData(index);
-                                        } : (){},
+                                      : !listStaff[index].clicked
+                                          ? () {
+                                              setState(() {
+                                                listStaff[index].clicked = true;
+                                              });
+                                              saveSwitchData(index);
+                                            }
+                                          : () {},
                                   child: Row(
                                     mainAxisSize: MainAxisSize.min,
                                     children: <Widget>[
@@ -1904,495 +2168,327 @@ class HomePageState extends State<HomePage> {
                       ],
                     ));
               },
-              body: SingleChildScrollView(
-                  child: Column(
-                children: <Widget>[
-                  Stack(
-                    children: <Widget>[
-                      FadeUp(
-                        1.0,
-                        Container(
-                          width: MediaQuery.of(context).size.width,
-                          height: MediaQuery.of(context).size.height * 0.28,
-                          padding: EdgeInsets.only(
-                              left: 20.0, right: 20.0, top: 30.0, bottom: 50.0),
-                          decoration: BoxDecoration(
-                            color: Theme.of(context).backgroundColor,
-                          ),
-                          child: Row(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: <Widget>[
-                              Container(
-                                padding: EdgeInsets.all(3.0),
-                                decoration: BoxDecoration(
-                                    shape: BoxShape.circle,
-                                    color: Theme.of(context).dividerColor.withAlpha(10)),
-                                child: ClipOval(
-                                    child: FadeInImage.assetNetwork(
-                                  placeholder: 'assets/images/absenin_icon.png',
+              body: SmartRefresher(
+                enablePullDown: true,
+                header: MaterialClassicHeader(),
+                controller: _refreshController,
+                onRefresh: _onRefresh,
+                child: SingleChildScrollView(
+                    child: Column(
+                  children: <Widget>[
+                    Stack(
+                      children: <Widget>[
+                        FadeUp(
+                          1.0,
+                          Container(
+                            width: MediaQuery.of(context).size.width,
+                            height: MediaQuery.of(context).size.height * 0.28,
+                            padding: EdgeInsets.only(
+                                left: 20.0,
+                                right: 20.0,
+                                top: 30.0,
+                                bottom: 50.0),
+                            decoration: BoxDecoration(
+                              color: Theme.of(context).backgroundColor,
+                            ),
+                            child: Row(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: <Widget>[
+                                Container(
+                                  padding: EdgeInsets.all(3.0),
+                                  decoration: BoxDecoration(
+                                      shape: BoxShape.circle,
+                                      color: Theme.of(context)
+                                          .dividerColor
+                                          .withAlpha(10)),
+                                  child: ClipOval(
+                                      child: CachedNetworkImage(
+                                    imageUrl: img,
+                                    height: 65.0,
+                                    width: 65.0,
+                                    fit: BoxFit.cover,
+                                  )
+                                      //     FadeInImage.assetNetwork(
+                                      //   placeholder:
+                                      //       'assets/images/absenin_icon.png',
+                                      //   height: 65.0,
+                                      //   width: 65.0,
+                                      //   image: img,
+                                      //   fadeInDuration: Duration(seconds: 1),
+                                      //   fit: BoxFit.cover,
+                                      // )
+                                      ),
+                                ),
+                                SizedBox(
+                                  width: 30,
+                                ),
+                                Container(
                                   height: 65.0,
-                                  width: 65.0,
-                                  image: img,
-                                  fadeInDuration: Duration(seconds: 1),
-                                  fit: BoxFit.cover,
-                                )),
-                              ),
-                              SizedBox(
-                                width: 30,
-                              ),
-                              Container(
-                                height: 65.0,
-                                child: Center(
-                                  child: Column(
-                                    mainAxisSize: MainAxisSize.min,
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
-                                    children: <Widget>[
-                                      SizedBox(
-                                        width:
-                                            MediaQuery.of(context).size.width *
-                                                0.55,
-                                        child: Text(
-                                          name,
-                                          style: TextStyle(
+                                  child: Center(
+                                    child: Column(
+                                      mainAxisSize: MainAxisSize.min,
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: <Widget>[
+                                        SizedBox(
+                                          width: MediaQuery.of(context)
+                                                  .size
+                                                  .width *
+                                              0.55,
+                                          child: Text(
+                                            name,
+                                            style: TextStyle(
+                                                fontSize: Theme.of(context)
+                                                    .textTheme
+                                                    .title
+                                                    .fontSize,
+                                                fontFamily: 'Google'),
+                                            overflow: TextOverflow.ellipsis,
+                                          ),
+                                        ),
+                                        SizedBox(
+                                          height: 5.0,
+                                        ),
+                                        Text(position,
+                                            style: TextStyle(
                                               fontSize: Theme.of(context)
                                                   .textTheme
-                                                  .title
+                                                  .caption
                                                   .fontSize,
-                                              fontFamily: 'Google'),
-                                          overflow: TextOverflow.ellipsis,
-                                        ),
-                                      ),
-                                      SizedBox(
-                                        height: 5.0,
-                                      ),
-                                      Text(position,
-                                          style: TextStyle(
-                                            fontSize: Theme.of(context)
-                                                .textTheme
-                                                .caption
-                                                .fontSize,
+                                              color: MediaQuery.of(context)
+                                                          .platformBrightness ==
+                                                      Brightness.light
+                                                  ? Colors.orange[800]
+                                                  : Colors.orange[300],
+                                            )),
+                                      ],
+                                    ),
+                                  ),
+                                )
+                              ],
+                            ),
+                          ),
+                        ),
+                        Column(
+                          children: <Widget>[
+                            SizedBox(
+                              height: MediaQuery.of(context).size.height * 0.15,
+                            ),
+                            if (noOperational)
+                              Container(
+                                margin: EdgeInsets.all(20.0),
+                                padding: EdgeInsets.all(16.0),
+                                decoration: BoxDecoration(
+                                    color: Theme.of(context).backgroundColor,
+                                    borderRadius: BorderRadius.circular(10.0),
+                                    boxShadow: [
+                                      BoxShadow(
+                                          blurRadius: 8.0,
+                                          color: MediaQuery.of(context)
+                                                      .platformBrightness ==
+                                                  Brightness.light
+                                              ? Colors.black12
+                                              : Colors.transparent,
+                                          offset: Offset(0.0, 3.0))
+                                    ]),
+                                child: Column(
+                                  children: <Widget>[
+                                    Row(
+                                      children: <Widget>[
+                                        Icon(Ionicons.md_warning,
                                             color: MediaQuery.of(context)
                                                         .platformBrightness ==
                                                     Brightness.light
-                                                ? Colors.orange[800]
-                                                : Colors.orange[300],
-                                          )),
-                                    ],
-                                  ),
+                                                ? Colors.indigo[400]
+                                                : Colors.indigo[300]),
+                                        SizedBox(
+                                          width: 10.0,
+                                        ),
+                                        Text("No schedule available",
+                                            style: TextStyle(
+                                              fontSize: Theme.of(context)
+                                                  .textTheme
+                                                  .subhead
+                                                  .fontSize,
+                                              fontFamily: 'Sans',
+                                              fontWeight: FontWeight.bold,
+                                            )),
+                                      ],
+                                    ),
+                                    SizedBox(
+                                      height: 20.0,
+                                    ),
+                                    Image.asset(
+                                      'assets/images/nodata.png',
+                                      height: 180,
+                                    ),
+                                    SizedBox(
+                                      height: 35.0,
+                                    ),
+                                  ],
                                 ),
                               )
-                            ],
-                          ),
-                        ),
-                      ),
-                      Column(
-                        children: <Widget>[
-                          SizedBox(
-                            height: MediaQuery.of(context).size.height * 0.15,
-                          ),
-                          if (listSchedule.length > 1)
-                            ListView.builder(
-                                shrinkWrap: true,
-                                physics: NeverScrollableScrollPhysics(),
-                                itemCount: listSchedule.length,
-                                itemBuilder: (context, index) {
-                                  return listSchedule[index].isOff
-                                      ? Container(
-                                          margin: index == 0
-                                              ? EdgeInsets.only(
-                                                  left: 20.0,
-                                                  right: 20.0,
-                                                  top: 5.0,
-                                                  bottom: 10.0)
-                                              : EdgeInsets.only(
-                                                  left: 20.0,
-                                                  right: 20.0,
-                                                  top: 20.0,
-                                                  bottom: 20.0),
-                                          padding: EdgeInsets.all(16.0),
-                                          decoration: BoxDecoration(
-                                              color: Theme.of(context)
-                                                  .backgroundColor,
-                                              borderRadius:
-                                                  BorderRadius.circular(10.0),
-                                              boxShadow: [
-                                                BoxShadow(
-                                                    blurRadius: 8.0,
-                                                    color: MediaQuery.of(
-                                                                    context)
-                                                                .platformBrightness ==
-                                                            Brightness.light
-                                                        ? Colors.black12
-                                                        : Colors.transparent,
-                                                    offset: Offset(0.0, 3.0))
-                                              ]),
-                                          child: Column(
-                                            children: <Widget>[
-                                              Row(
-                                                children: <Widget>[
-                                                  Icon(Ionicons.md_calendar,
+                            else if (listSchedule.length > 1 && !noOperational)
+                              ListView.builder(
+                                  shrinkWrap: true,
+                                  physics: NeverScrollableScrollPhysics(),
+                                  itemCount: listSchedule.length,
+                                  itemBuilder: (context, index) {
+                                    return listSchedule[index].isOff
+                                        ? Container(
+                                            margin: index == 0
+                                                ? EdgeInsets.only(
+                                                    left: 20.0,
+                                                    right: 20.0,
+                                                    top: 5.0,
+                                                    bottom: 10.0)
+                                                : EdgeInsets.only(
+                                                    left: 20.0,
+                                                    right: 20.0,
+                                                    top: 20.0,
+                                                    bottom: 20.0),
+                                            padding: EdgeInsets.all(16.0),
+                                            decoration: BoxDecoration(
+                                                color: Theme.of(context)
+                                                    .backgroundColor,
+                                                borderRadius:
+                                                    BorderRadius.circular(10.0),
+                                                boxShadow: [
+                                                  BoxShadow(
+                                                      blurRadius: 8.0,
                                                       color: MediaQuery.of(
                                                                       context)
                                                                   .platformBrightness ==
                                                               Brightness.light
-                                                          ? Colors.red[400]
-                                                          : Colors.red[300]),
-                                                  SizedBox(
-                                                    width: 10.0,
-                                                  ),
-                                                  Text(
-                                                    dateFormat.format(
-                                                        listSchedule[index]
-                                                            .date),
-                                                    style: TextStyle(
-                                                        fontSize:
-                                                            Theme.of(context)
-                                                                .textTheme
-                                                                .subhead
-                                                                .fontSize,
-                                                        fontFamily: 'Sans',
-                                                        fontWeight:
-                                                            FontWeight.bold,
+                                                          ? Colors.black12
+                                                          : Colors.transparent,
+                                                      offset: Offset(0.0, 3.0))
+                                                ]),
+                                            child: Column(
+                                              children: <Widget>[
+                                                Row(
+                                                  children: <Widget>[
+                                                    Icon(Ionicons.md_calendar,
                                                         color: MediaQuery.of(
                                                                         context)
                                                                     .platformBrightness ==
-                                                                Brightness
-                                                                    .light
-                                                            ? Colors.red[900]
-                                                            : Colors
-                                                                .red[400]),
-                                                  ),
-                                                ],
-                                              ),
-                                              SizedBox(
-                                                height: 20.0,
-                                              ),
-                                              Image.asset(
-                                                'assets/images/cinemas.png',
-                                                height: 180,
-                                              ),
-                                              SizedBox(
-                                                height: 25.0,
-                                              ),
-                                              Text(
-                                                'Enjoy your free day!',
-                                                style: TextStyle(
-                                                    fontSize:
-                                                        Theme.of(context)
-                                                            .textTheme
-                                                            .title
-                                                            .fontSize,
-                                                    fontFamily: 'Google',
-                                                    fontWeight:
-                                                        FontWeight.bold),
-                                              ),
-                                              SizedBox(
-                                                height: 10.0,
-                                              ),
-                                            ],
-                                          ),
-                                        )
-                                      : listSchedule[index].isPermit
-                                          ? Container(
-                                              margin: index == 0
-                                                  ? EdgeInsets.only(
-                                                      left: 20.0,
-                                                      right: 20.0,
-                                                      top: 5.0,
-                                                      bottom: 10.0)
-                                                  : EdgeInsets.only(
-                                                      left: 20.0,
-                                                      right: 20.0,
-                                                      top: 20.0,
-                                                      bottom: 20.0),
-                                              padding: EdgeInsets.all(16.0),
-                                              decoration: BoxDecoration(
-                                                  color: Theme.of(context)
-                                                      .backgroundColor,
-                                                  borderRadius:
-                                                      BorderRadius.circular(
-                                                          10.0),
-                                                  boxShadow: [
-                                                    BoxShadow(
-                                                        blurRadius: 8.0,
-                                                        color: MediaQuery.of(
-                                                                        context)
-                                                                    .platformBrightness ==
-                                                                Brightness
-                                                                    .light
-                                                            ? Colors.black12
-                                                            : Colors
-                                                                .transparent,
-                                                        offset:
-                                                            Offset(0.0, 3.0))
-                                                  ]),
-                                              child: Column(
-                                                children: <Widget>[
-                                                  Row(
-                                                    children: <Widget>[
-                                                      Icon(
-                                                          Ionicons
-                                                              .md_calendar,
+                                                                Brightness.light
+                                                            ? Colors.red[400]
+                                                            : Colors.red[300]),
+                                                    SizedBox(
+                                                      width: 10.0,
+                                                    ),
+                                                    Text(
+                                                      dateFormat.format(
+                                                          listSchedule[index]
+                                                              .date),
+                                                      style: TextStyle(
+                                                          fontSize:
+                                                              Theme.of(context)
+                                                                  .textTheme
+                                                                  .subhead
+                                                                  .fontSize,
+                                                          fontFamily: 'Sans',
+                                                          fontWeight:
+                                                              FontWeight.bold,
                                                           color: MediaQuery.of(
                                                                           context)
                                                                       .platformBrightness ==
                                                                   Brightness
                                                                       .light
-                                                              ? Colors
-                                                                  .indigo[400]
-                                                              : Colors.indigo[
-                                                                  300]),
-                                                      SizedBox(
-                                                        width: 10.0,
-                                                      ),
-                                                      Text(
-                                                          dateFormat.format(
-                                                              listSchedule[
-                                                                      index]
-                                                                  .date),
-                                                          style: TextStyle(
-                                                            fontSize: Theme.of(
-                                                                    context)
-                                                                .textTheme
-                                                                .subhead
-                                                                .fontSize,
-                                                            fontFamily:
-                                                                'Sans',
-                                                            fontWeight:
-                                                                FontWeight
-                                                                    .bold,
-                                                          )),
-                                                    ],
-                                                  ),
-                                                  SizedBox(
-                                                    height: 20.0,
-                                                  ),
-                                                  Image.asset(
-                                                    'assets/images/permit.png',
-                                                    height: 180,
-                                                  ),
-                                                  SizedBox(
-                                                    height: 25.0,
-                                                  ),
-                                                  Text(
-                                                    'You have permitted!',
-                                                    style: TextStyle(
-                                                        fontSize:
-                                                            Theme.of(context)
-                                                                .textTheme
-                                                                .title
-                                                                .fontSize,
-                                                        fontFamily: 'Google',
-                                                        fontWeight:
-                                                            FontWeight.bold),
-                                                  ),
-                                                  SizedBox(
-                                                    height: 10.0,
-                                                  ),
-                                                ],
-                                              ),
-                                            )
-                                          : listSchedule[index].isSwitchAcc == 1
-                                              ? Container(
-                                                  margin: index == 0
-                                                      ? EdgeInsets.only(
-                                                          left: 20.0,
-                                                          right: 20.0,
-                                                          top: 5.0,
-                                                          bottom: 10.0)
-                                                      : EdgeInsets.only(
-                                                          left: 20.0,
-                                                          right: 20.0,
-                                                          top: 20.0,
-                                                          bottom: 20.0),
-                                                  padding:
-                                                      EdgeInsets.all(16.0),
-                                                  decoration: BoxDecoration(
-                                                      color: Theme.of(context)
-                                                          .backgroundColor,
-                                                      borderRadius:
-                                                          BorderRadius
-                                                              .circular(10.0),
-                                                      boxShadow: [
-                                                        BoxShadow(
-                                                            blurRadius: 8.0,
+                                                              ? Colors.red[900]
+                                                              : Colors
+                                                                  .red[400]),
+                                                    ),
+                                                  ],
+                                                ),
+                                                SizedBox(
+                                                  height: 20.0,
+                                                ),
+                                                Image.asset(
+                                                  'assets/images/cinemas.png',
+                                                  height: 180,
+                                                ),
+                                                SizedBox(
+                                                  height: 25.0,
+                                                ),
+                                                Text(
+                                                  'Enjoy your free day!',
+                                                  style: TextStyle(
+                                                      fontSize:
+                                                          Theme.of(context)
+                                                              .textTheme
+                                                              .title
+                                                              .fontSize,
+                                                      fontFamily: 'Google',
+                                                      fontWeight:
+                                                          FontWeight.bold),
+                                                ),
+                                                SizedBox(
+                                                  height: 10.0,
+                                                ),
+                                              ],
+                                            ),
+                                          )
+                                        : listSchedule[index].isPermit
+                                            ? Container(
+                                                margin: index == 0
+                                                    ? EdgeInsets.only(
+                                                        left: 20.0,
+                                                        right: 20.0,
+                                                        top: 5.0,
+                                                        bottom: 10.0)
+                                                    : EdgeInsets.only(
+                                                        left: 20.0,
+                                                        right: 20.0,
+                                                        top: 20.0,
+                                                        bottom: 20.0),
+                                                padding: EdgeInsets.all(16.0),
+                                                decoration: BoxDecoration(
+                                                    color: Theme.of(context)
+                                                        .backgroundColor,
+                                                    borderRadius:
+                                                        BorderRadius.circular(
+                                                            10.0),
+                                                    boxShadow: [
+                                                      BoxShadow(
+                                                          blurRadius: 8.0,
+                                                          color: MediaQuery.of(
+                                                                          context)
+                                                                      .platformBrightness ==
+                                                                  Brightness
+                                                                      .light
+                                                              ? Colors.black12
+                                                              : Colors
+                                                                  .transparent,
+                                                          offset:
+                                                              Offset(0.0, 3.0))
+                                                    ]),
+                                                child: Column(
+                                                  children: <Widget>[
+                                                    Row(
+                                                      children: <Widget>[
+                                                        Icon(
+                                                            Ionicons
+                                                                .md_calendar,
                                                             color: MediaQuery.of(
                                                                             context)
                                                                         .platformBrightness ==
                                                                     Brightness
                                                                         .light
                                                                 ? Colors
-                                                                    .black12
-                                                                : Colors
-                                                                    .transparent,
-                                                            offset: Offset(
-                                                                0.0, 3.0))
-                                                      ]),
-                                                  child: Column(
-                                                    children: <Widget>[
-                                                      Row(
-                                                        children: <Widget>[
-                                                          Icon(
-                                                              Ionicons
-                                                                  .md_calendar,
-                                                              color: MediaQuery.of(context)
-                                                                          .platformBrightness ==
-                                                                      Brightness
-                                                                          .light
-                                                                  ? Colors.indigo[
-                                                                      400]
-                                                                  : Colors.indigo[
-                                                                      300]),
-                                                          SizedBox(
-                                                            width: 10.0,
-                                                          ),
-                                                          Text(
-                                                              dateFormat.format(
-                                                                  listSchedule[
-                                                                          index]
-                                                                      .date),
-                                                              style:
-                                                                  TextStyle(
-                                                                fontSize: Theme.of(
-                                                                        context)
-                                                                    .textTheme
-                                                                    .subhead
-                                                                    .fontSize,
-                                                                fontFamily:
-                                                                    'Sans',
-                                                                fontWeight:
-                                                                    FontWeight
-                                                                        .bold,
-                                                              )),
-                                                        ],
-                                                      ),
-                                                      SizedBox(
-                                                        height: 20.0,
-                                                      ),
-                                                      Image.asset(
-                                                        'assets/images/switch1.png',
-                                                        height: 180,
-                                                      ),
-                                                      SizedBox(
-                                                        height: 25.0,
-                                                      ),
-                                                      Text(
-                                                        'You have Switched!',
-                                                        style: TextStyle(
-                                                            fontSize: Theme.of(
-                                                                    context)
-                                                                .textTheme
-                                                                .title
-                                                                .fontSize,
-                                                            fontFamily:
-                                                                'Google',
-                                                            fontWeight:
-                                                                FontWeight
-                                                                    .bold),
-                                                      ),
-                                                      SizedBox(
-                                                        height: 3.0,
-                                                      ),
-                                                      Text(
-                                                        '${dateFormat.format(listSchedule[index].switchDate)}',
-                                                          style: TextStyle(
-                                                              fontSize: Theme.of(
-                                                                      context)
-                                                                  .textTheme
-                                                                  .caption
-                                                                  .fontSize,
-                                                              fontFamily:
-                                                                  'Sans',),
-                                                      ),
-                                                      SizedBox(
-                                                        height: 10.0,
-                                                      ),
-                                                    ],
-                                                  ),
-                                                )
-                                              : Container(
-                                                margin: index == 0
-                                                    ? EdgeInsets.only(
-                                                        left: 20.0,
-                                                        right: 20.0,
-                                                        top: 5.0,
-                                                        bottom: 20.0)
-                                                    : EdgeInsets.all(
-                                                        20.0),
-                                                padding: EdgeInsets.all(
-                                                    16.0),
-                                                decoration: BoxDecoration(
-                                                    color: index == 0
-                                                        ? MediaQuery.of(context)
-                                                                    .platformBrightness ==
-                                                                Brightness
-                                                                    .light
-                                                            ? Theme.of(
-                                                                    context)
-                                                                .backgroundColor
-                                                            : Colors
-                                                                .indigo
-                                                        : Theme.of(
-                                                                context)
-                                                            .backgroundColor,
-                                                    borderRadius:
-                                                        BorderRadius
-                                                            .circular(
-                                                                10.0),
-                                                    boxShadow: [
-                                                      BoxShadow(
-                                                          blurRadius:
-                                                              8.0,
-                                                          color: MediaQuery.of(context)
-                                                                      .platformBrightness ==
-                                                                  Brightness
-                                                                      .light
-                                                              ? Colors
-                                                                  .black12
-                                                              : Colors
-                                                                  .transparent,
-                                                          offset:
-                                                              Offset(
-                                                                  0.0,
-                                                                  3.0))
-                                                    ]),
-                                                child: Column(
-                                                  crossAxisAlignment:
-                                                      CrossAxisAlignment
-                                                          .start,
-                                                  children: <Widget>[
-                                                    Row(
-                                                      children: <
-                                                          Widget>[
-                                                        Icon(
-                                                          Ionicons
-                                                              .md_calendar,
-                                                          color: index ==
-                                                                  0
-                                                              ? MediaQuery.of(context).platformBrightness ==
-                                                                      Brightness
-                                                                          .light
-                                                                  ? Colors.indigo[
-                                                                      300]
-                                                                  : Colors.indigoAccent[
-                                                                      100]
-                                                              : Theme.of(
-                                                                      context)
-                                                                  .disabledColor,
-                                                        ),
+                                                                    .indigo[400]
+                                                                : Colors.indigo[
+                                                                    300]),
                                                         SizedBox(
                                                           width: 10.0,
                                                         ),
                                                         Text(
-                                                          index == 0
-                                                              ? dateFormat.format(
-                                                                  listSchedule[index]
-                                                                      .date)
-                                                              : dateFormat
-                                                                  .format(
-                                                                      listSchedule[index].date),
-                                                          style: TextStyle(
+                                                            dateFormat.format(
+                                                                listSchedule[
+                                                                        index]
+                                                                    .date),
+                                                            style: TextStyle(
                                                               fontSize: Theme.of(
                                                                       context)
                                                                   .textTheme
@@ -2402,805 +2498,1182 @@ class HomePageState extends State<HomePage> {
                                                                   'Sans',
                                                               fontWeight:
                                                                   FontWeight
-                                                                      .bold),
-                                                        ),
+                                                                      .bold,
+                                                            )),
                                                       ],
                                                     ),
-                                                    Divider(),
+                                                    SizedBox(
+                                                      height: 20.0,
+                                                    ),
+                                                    Image.asset(
+                                                      'assets/images/permit.png',
+                                                      height: 180,
+                                                    ),
+                                                    SizedBox(
+                                                      height: 25.0,
+                                                    ),
+                                                    Text(
+                                                      'You have permitted!',
+                                                      style: TextStyle(
+                                                          fontSize:
+                                                              Theme.of(context)
+                                                                  .textTheme
+                                                                  .title
+                                                                  .fontSize,
+                                                          fontFamily: 'Google',
+                                                          fontWeight:
+                                                              FontWeight.bold),
+                                                    ),
                                                     SizedBox(
                                                       height: 10.0,
                                                     ),
-                                                    Text(
-                                                      listSchedule[
-                                                              index]
-                                                          .shift,
-                                                      style: TextStyle(
-                                                          fontSize: Theme.of(
-                                                                  context)
-                                                              .textTheme
-                                                              .title
-                                                              .fontSize,
-                                                          fontFamily:
-                                                              'Google',
-                                                          fontWeight:
-                                                              FontWeight
-                                                                  .bold),
-                                                    ),
-                                                    SizedBox(
-                                                      height: 5.0,
-                                                    ),
-                                                    Row(
-                                                      mainAxisAlignment:
-                                                          MainAxisAlignment
-                                                              .spaceBetween,
-                                                      children: <
-                                                          Widget>[
-                                                        Text(
-                                                          timeFormat.format(
-                                                                  listSchedule[index]
-                                                                      .startTime) +
-                                                              ' AM',
-                                                          style:
-                                                              TextStyle(
-                                                            fontSize: Theme.of(
-                                                                    context)
-                                                                .textTheme
-                                                                .body2
-                                                                .fontSize,
-                                                            fontFamily:
-                                                                'Sans',
-                                                            color: Theme.of(
-                                                                    context)
-                                                                .textTheme
-                                                                .caption
-                                                                .color,
-                                                          ),
-                                                        ),
+                                                  ],
+                                                ),
+                                              )
+                                            : listSchedule[index].isSwitchAcc ==
+                                                    1
+                                                ? Container(
+                                                    margin: index == 0
+                                                        ? EdgeInsets.only(
+                                                            left: 20.0,
+                                                            right: 20.0,
+                                                            top: 5.0,
+                                                            bottom: 10.0)
+                                                        : EdgeInsets.only(
+                                                            left: 20.0,
+                                                            right: 20.0,
+                                                            top: 20.0,
+                                                            bottom: 20.0),
+                                                    padding:
+                                                        EdgeInsets.all(16.0),
+                                                    decoration: BoxDecoration(
+                                                        color: Theme.of(context)
+                                                            .backgroundColor,
+                                                        borderRadius:
+                                                            BorderRadius
+                                                                .circular(10.0),
+                                                        boxShadow: [
+                                                          BoxShadow(
+                                                              blurRadius: 8.0,
+                                                              color: MediaQuery.of(
+                                                                              context)
+                                                                          .platformBrightness ==
+                                                                      Brightness
+                                                                          .light
+                                                                  ? Colors
+                                                                      .black12
+                                                                  : Colors
+                                                                      .transparent,
+                                                              offset: Offset(
+                                                                  0.0, 3.0))
+                                                        ]),
+                                                    child: Column(
+                                                      children: <Widget>[
                                                         Row(
-                                                          mainAxisSize:
-                                                              MainAxisSize
-                                                                  .min,
-                                                          children: <
-                                                              Widget>[
-                                                            for (int i =
-                                                                    0;
-                                                                i < 20;
-                                                                i++)
-                                                              Row(
-                                                                children: <
-                                                                    Widget>[
-                                                                  Container(
-                                                                    width:
-                                                                        3.5,
-                                                                    height:
-                                                                        3.5,
-                                                                    decoration:
-                                                                        BoxDecoration(color: Theme.of(context).textTheme.caption.color, shape: BoxShape.circle),
-                                                                  ),
-                                                                  if (i <
-                                                                      19)
-                                                                    SizedBox(
-                                                                      width: 5.0,
-                                                                    ),
-                                                                ],
-                                                              ),
+                                                          children: <Widget>[
+                                                            Icon(
+                                                                Ionicons
+                                                                    .md_calendar,
+                                                                color: MediaQuery.of(context)
+                                                                            .platformBrightness ==
+                                                                        Brightness
+                                                                            .light
+                                                                    ? Colors.indigo[
+                                                                        400]
+                                                                    : Colors.indigo[
+                                                                        300]),
+                                                            SizedBox(
+                                                              width: 10.0,
+                                                            ),
+                                                            Text(
+                                                                dateFormat.format(
+                                                                    listSchedule[
+                                                                            index]
+                                                                        .date),
+                                                                style:
+                                                                    TextStyle(
+                                                                  fontSize: Theme.of(
+                                                                          context)
+                                                                      .textTheme
+                                                                      .subhead
+                                                                      .fontSize,
+                                                                  fontFamily:
+                                                                      'Sans',
+                                                                  fontWeight:
+                                                                      FontWeight
+                                                                          .bold,
+                                                                )),
                                                           ],
                                                         ),
+                                                        SizedBox(
+                                                          height: 20.0,
+                                                        ),
+                                                        Image.asset(
+                                                          'assets/images/switch1.png',
+                                                          height: 180,
+                                                        ),
+                                                        SizedBox(
+                                                          height: 25.0,
+                                                        ),
                                                         Text(
-                                                          timeFormat.format(
-                                                                  listSchedule[index]
-                                                                      .endTime) +
-                                                              ' PM',
-                                                          style:
-                                                              TextStyle(
+                                                          'You have Switched!',
+                                                          style: TextStyle(
+                                                              fontSize: Theme.of(
+                                                                      context)
+                                                                  .textTheme
+                                                                  .title
+                                                                  .fontSize,
+                                                              fontFamily:
+                                                                  'Google',
+                                                              fontWeight:
+                                                                  FontWeight
+                                                                      .bold),
+                                                        ),
+                                                        SizedBox(
+                                                          height: 3.0,
+                                                        ),
+                                                        Text(
+                                                          '${dateFormat.format(listSchedule[index].switchDate)}',
+                                                          style: TextStyle(
                                                             fontSize: Theme.of(
                                                                     context)
                                                                 .textTheme
-                                                                .body2
-                                                                .fontSize,
-                                                            fontFamily:
-                                                                'Sans',
-                                                            color: Theme.of(
-                                                                    context)
-                                                                .textTheme
                                                                 .caption
-                                                                .color,
+                                                                .fontSize,
+                                                            fontFamily: 'Sans',
                                                           ),
+                                                        ),
+                                                        SizedBox(
+                                                          height: 10.0,
                                                         ),
                                                       ],
                                                     ),
-                                                    if (index == 0 &&
-                                                        listSchedule[
-                                                                index]
-                                                            .isClockIn)
-                                                      Column(
-                                                        children: <
-                                                            Widget>[
+                                                  )
+                                                : Container(
+                                                    margin: index == 0
+                                                        ? EdgeInsets.only(
+                                                            left: 20.0,
+                                                            right: 20.0,
+                                                            top: 5.0,
+                                                            bottom: 20.0)
+                                                        : EdgeInsets.all(20.0),
+                                                    padding:
+                                                        EdgeInsets.all(16.0),
+                                                    decoration: BoxDecoration(
+                                                        color: index == 0
+                                                            ? MediaQuery.of(context)
+                                                                        .platformBrightness ==
+                                                                    Brightness
+                                                                        .light
+                                                                ? Theme.of(
+                                                                        context)
+                                                                    .backgroundColor
+                                                                : Colors.indigo
+                                                            : Theme.of(context)
+                                                                .backgroundColor,
+                                                        borderRadius:
+                                                            BorderRadius
+                                                                .circular(10.0),
+                                                        boxShadow: [
+                                                          BoxShadow(
+                                                              blurRadius: 8.0,
+                                                              color: MediaQuery.of(
+                                                                              context)
+                                                                          .platformBrightness ==
+                                                                      Brightness
+                                                                          .light
+                                                                  ? Colors
+                                                                      .black12
+                                                                  : Colors
+                                                                      .transparent,
+                                                              offset: Offset(
+                                                                  0.0, 3.0))
+                                                        ]),
+                                                    child: Column(
+                                                      crossAxisAlignment:
+                                                          CrossAxisAlignment
+                                                              .start,
+                                                      children: <Widget>[
+                                                        Row(
+                                                          children: <Widget>[
+                                                            Icon(
+                                                              Ionicons
+                                                                  .md_calendar,
+                                                              color: index == 0
+                                                                  ? MediaQuery.of(context)
+                                                                              .platformBrightness ==
+                                                                          Brightness
+                                                                              .light
+                                                                      ? Colors.indigo[
+                                                                          300]
+                                                                      : Colors.indigoAccent[
+                                                                          100]
+                                                                  : Theme.of(
+                                                                          context)
+                                                                      .disabledColor,
+                                                            ),
+                                                            SizedBox(
+                                                              width: 10.0,
+                                                            ),
+                                                            Text(
+                                                              index == 0
+                                                                  ? dateFormat.format(
+                                                                      listSchedule[
+                                                                              index]
+                                                                          .date)
+                                                                  : dateFormat.format(
+                                                                      listSchedule[
+                                                                              index]
+                                                                          .date),
+                                                              style: TextStyle(
+                                                                  fontSize: Theme.of(
+                                                                          context)
+                                                                      .textTheme
+                                                                      .subhead
+                                                                      .fontSize,
+                                                                  fontFamily:
+                                                                      'Sans',
+                                                                  fontWeight:
+                                                                      FontWeight
+                                                                          .bold),
+                                                            ),
+                                                          ],
+                                                        ),
+                                                        Divider(),
+                                                        SizedBox(
+                                                          height: 10.0,
+                                                        ),
+                                                        if (listSchedule[index]
+                                                                .pos
+                                                                .length >
+                                                            0)
+                                                          Text(
+                                                            listSchedule[index]
+                                                                .pos,
+                                                            style: TextStyle(
+                                                                fontSize: Theme.of(
+                                                                        context)
+                                                                    .textTheme
+                                                                    .title
+                                                                    .fontSize,
+                                                                fontFamily:
+                                                                    'OpenSans',
+                                                                fontWeight:
+                                                                    FontWeight
+                                                                        .bold),
+                                                          ),
+                                                        if (listSchedule[index]
+                                                                .pos
+                                                                .length >
+                                                            0)
                                                           SizedBox(
-                                                            height:
-                                                                30.0,
+                                                            height: 15.0,
                                                           ),
-                                                          ClipRRect(
+                                                        Text(
+                                                          listSchedule[index]
+                                                              .shift,
+                                                          style: TextStyle(
+                                                              fontSize: Theme.of(
+                                                                      context)
+                                                                  .textTheme
+                                                                  .subhead
+                                                                  .fontSize,
+                                                              fontFamily:
+                                                                  'Google',
+                                                              fontWeight:
+                                                                  FontWeight
+                                                                      .bold),
+                                                        ),
+                                                        SizedBox(
+                                                          height: 5.0,
+                                                        ),
+                                                        Container(
+                                                          padding:
+                                                              EdgeInsets.all(
+                                                                  8.0),
+                                                          decoration:
+                                                              BoxDecoration(
                                                             borderRadius:
-                                                                BorderRadius.circular(
-                                                                    5.0),
-                                                            child:
-                                                                Steps(
-                                                              // direction: 'vertical',
-                                                              steps: listSchedule[index]
-                                                                      .isOverTime
-                                                                  ? [
-                                                                      StepItem('Clockin'),
-                                                                      StepItem('Break'),
-                                                                      StepItem('After break'),
-                                                                      StepItem('Clockout'),
-                                                                      StepItem('Ovt In'),
-                                                                      StepItem('Ovt Out'),
-                                                                    ]
-                                                                  : [
-                                                                      StepItem('Clockin'),
-                                                                      StepItem('Break'),
-                                                                      StepItem('After break'),
-                                                                      StepItem('Clockout'),
-                                                                    ],
-                                                              active: listSchedule[
-                                                                      index]
-                                                                  ._active,
-                                                            ),
-                                                          ),
-                                                        ],
-                                                      ),
-                                                    SizedBox(
-                                                      height: 30.0,
-                                                    ),
-                                                    if (listSchedule[
-                                                                    index]
-                                                                .isOverTime &&
-                                                            listSchedule[index]
-                                                                    ._active <
-                                                                5 ||
-                                                        !listSchedule[
-                                                                    index]
-                                                                .isClockOut &&
-                                                            listSchedule[index]
-                                                                    ._active <
-                                                                5)
-                                                      Row(
-                                                        mainAxisAlignment:
-                                                            MainAxisAlignment
-                                                                .spaceBetween,
-                                                        children: <
-                                                            Widget>[
-                                                          if (index !=
-                                                                  0 &&
-                                                              !listSchedule[
-                                                                      index]
-                                                                  .isSwitch)
-                                                            FlatButton(
-                                                              onPressed:
-                                                                  () {
-                                                                if (collaps) {
-                                                                  _panelController
-                                                                      .open();
-                                                                  setState(
-                                                                      () {
-                                                                    collaps =
-                                                                        false;
-                                                                    indexList =
-                                                                        index;
-                                                                  });
-                                                                } else {
-                                                                  _panelController
-                                                                      .close();
-                                                                  setState(
-                                                                      () {
-                                                                    collaps =
-                                                                        true;
-                                                                    indexList =
-                                                                        0;
-                                                                  });
-                                                                }
-                                                              },
-                                                              child:
-                                                                  Row(
-                                                                children: <
-                                                                    Widget>[
-                                                                  Icon(
-                                                                    Ionicons.ios_repeat,
-                                                                    color:
-                                                                        Colors.white,
-                                                                  ),
-                                                                  SizedBox(
-                                                                    width:
-                                                                        5.0,
-                                                                  ),
-                                                                  Text(
-                                                                    'Switch',
-                                                                    style: TextStyle(
-                                                                        color: Colors.white,
-                                                                        fontFamily: 'Google',
-                                                                        fontWeight: FontWeight.bold),
-                                                                  ),
-                                                                ],
-                                                              ),
-                                                              color: MediaQuery.of(context).platformBrightness ==
-                                                                      Brightness
-                                                                          .light
-                                                                  ? Colors
-                                                                      .orange
-                                                                  : Colors
-                                                                      .orange[300],
-                                                              shape: RoundedRectangleBorder(
-                                                                  borderRadius:
-                                                                      BorderRadius.circular(5.0)),
-                                                              splashColor:
-                                                                  Colors
-                                                                      .black26,
-                                                              highlightColor:
-                                                                  Colors
-                                                                      .black26,
-                                                            )
-                                                          else
-                                                            Row(
-                                                              children: <
-                                                                  Widget>[
-                                                                if (listSchedule[index]
-                                                                    .isSwitch)
-                                                                  Icon(
-                                                                    FontAwesome.hourglass_2,
-                                                                    size:
-                                                                        16.0,
-                                                                    color: MediaQuery.of(context).platformBrightness == Brightness.light
-                                                                        ? Colors.orange
-                                                                        : Colors.orange[300],
-                                                                  ),
-                                                                if (listSchedule[index]
-                                                                    .isSwitch)
-                                                                  SizedBox(
-                                                                    width:
-                                                                        8.0,
-                                                                  ),
-                                                                Text(
-                                                                  listSchedule[index]._active >= 0
-                                                                      ? 'You late ${listSchedule[index].lateTime} minutes'
-                                                                      : listSchedule[index].isSwitch ? 'Your switch request\n is being processed' : '15 minutes again',
-                                                                  style: listSchedule[index].isSwitch
-                                                                      ? TextStyle(color: MediaQuery.of(context).platformBrightness == Brightness.light ? Colors.orange : Colors.orange[300], fontSize: Theme.of(context).textTheme.caption.fontSize, fontFamily: 'Sans')
-                                                                      : Theme.of(context).textTheme.caption,
-                                                                ),
-                                                              ],
-                                                            ),
-                                                          FlatButton(
-                                                            onPressed:
-                                                                () {
-                                                              if (index ==
-                                                                  0) {
-                                                                if (!listSchedule[index]
-                                                                    .isClockIn) {
-                                                                  _gotoMapsPage(
-                                                                      10,
-                                                                      listSchedule[index].shift,
-                                                                      index,
-                                                                      listSchedule[index].startTime);
-                                                                } else if (listSchedule[index]._active ==
-                                                                    0) {
-                                                                      _showAlertDialog('Attention', 'Are you sure want to break right now?', 20, index);
-                                                                } else if (listSchedule[index]._active ==
-                                                                    1) {
-                                                                  _gotoMapsPage(
-                                                                      20,
-                                                                      listSchedule[index].shift,
-                                                                      index,
-                                                                      DateTime.now());
-                                                                } else if (listSchedule[index]._active ==
-                                                                    2) {
-                                                                  _checkTimeNow(
-                                                                      index,
-                                                                      listSchedule[index].shift,
-                                                                      20);
-                                                                } else if (listSchedule[index]._active ==
-                                                                    3) {
-                                                                  _gotoMapsPage(
-                                                                      30,
-                                                                      listSchedule[index].shift,
-                                                                      index,
-                                                                      DateTime.now());
-                                                                } else {
-                                                                  _checkTimeNow(
-                                                                      index,
-                                                                      listSchedule[index].shift,
-                                                                      30);
-                                                                }
-                                                              } else {
-                                                                _getReminderSet(index);
-                                                              }
-                                                            },
-                                                            child: Row(
-                                                              children: <
-                                                                  Widget>[
-                                                                if (index !=
-                                                                    0)
-                                                                  Icon(
-                                                                    Ionicons.ios_notifications_outline,
-                                                                    color:
-                                                                        Colors.white,
-                                                                  ),
-                                                                SizedBox(
-                                                                  width:
-                                                                      5.0,
-                                                                ),
-                                                                Text(
-                                                                  index == 0
-                                                                      ? listSchedule[index]._active == 0 ? 'Break' : listSchedule[index]._active == 1 ? 'After Break' : listSchedule[index]._active == 2 ? 'Clock Out' : listSchedule[index]._active == 3 ? 'Overtime In' : listSchedule[index]._active == 4 ? 'Overtime Out' : 'Clock in'
-                                                                      : 'Remind Me',
-                                                                  style: TextStyle(
-                                                                      color: Colors.white,
-                                                                      fontFamily: 'Google',
-                                                                      fontWeight: FontWeight.bold),
-                                                                ),
-                                                              ],
-                                                            ),
-                                                            color: index ==
-                                                                    0
-                                                                ? MediaQuery.of(context).platformBrightness == Brightness.light
-                                                                    ? Colors
-                                                                        .indigo
+                                                                BorderRadius
+                                                                    .circular(
+                                                                        5.0),
+                                                            color: index == 0
+                                                                ? MediaQuery.of(context)
+                                                                            .platformBrightness ==
+                                                                        Brightness
+                                                                            .light
+                                                                    ? Colors.grey[
+                                                                        100]
                                                                     : Colors.indigo[
-                                                                        900]
-                                                                : Theme.of(context)
-                                                                    .buttonColor,
-                                                            shape: RoundedRectangleBorder(
-                                                                borderRadius:
-                                                                    BorderRadius.circular(5.0)),
-                                                            splashColor:
-                                                                Colors
-                                                                    .black26,
-                                                            highlightColor:
-                                                                Colors
-                                                                    .black26,
-                                                          )
-                                                        ],
-                                                      )
-                                                    else
-                                                      Row(
-                                                        mainAxisAlignment:
-                                                            MainAxisAlignment
-                                                                .spaceBetween,
-                                                        children: <
-                                                            Widget>[
-                                                          if (index !=
-                                                              0)
-                                                            FlatButton(
-                                                              onPressed:
-                                                                  () {
-                                                                if (collaps) {
-                                                                  _panelController
-                                                                      .open();
-                                                                  setState(
-                                                                      () {
-                                                                    collaps =
-                                                                        false;
-                                                                  });
-                                                                } else {
-                                                                  _panelController
-                                                                      .close();
-                                                                  setState(
-                                                                      () {
-                                                                    collaps =
-                                                                        true;
-                                                                  });
-                                                                }
-                                                              },
-                                                              child:
-                                                                  Row(
-                                                                children: <
-                                                                    Widget>[
-                                                                  Icon(
-                                                                    Ionicons.ios_repeat,
-                                                                    color:
-                                                                        Colors.white,
-                                                                  ),
-                                                                  SizedBox(
-                                                                    width:
-                                                                        5.0,
-                                                                  ),
-                                                                  Text(
-                                                                    'Switch',
-                                                                    style: TextStyle(
-                                                                        color: Colors.white,
-                                                                        fontFamily: 'Google',
-                                                                        fontWeight: FontWeight.bold),
-                                                                  ),
-                                                                ],
-                                                              ),
-                                                              color: MediaQuery.of(context).platformBrightness ==
-                                                                      Brightness
-                                                                          .light
-                                                                  ? Colors
-                                                                      .orange
-                                                                  : Colors
-                                                                      .orange[300],
-                                                              shape: RoundedRectangleBorder(
-                                                                  borderRadius:
-                                                                      BorderRadius.circular(5.0)),
-                                                              splashColor:
-                                                                  Colors
-                                                                      .black26,
-                                                              highlightColor:
-                                                                  Colors
-                                                                      .black26,
-                                                            )
-                                                          else
-                                                            Column(
-                                                              children: <
-                                                                  Widget>[
-                                                                Text(
-                                                                  'Your Work Finished',
-                                                                  style: Theme.of(context)
+                                                                        700]
+                                                                : MediaQuery.of(context)
+                                                                            .platformBrightness ==
+                                                                        Brightness
+                                                                            .light
+                                                                    ? Colors.grey[
+                                                                        100]
+                                                                    : Colors.grey[
+                                                                        900],
+                                                          ),
+                                                          child: Row(
+                                                            mainAxisAlignment:
+                                                                MainAxisAlignment
+                                                                    .spaceBetween,
+                                                            children: <Widget>[
+                                                              Text(
+                                                                timeFormat.format(
+                                                                    listSchedule[
+                                                                            index]
+                                                                        .startTime),
+                                                                style:
+                                                                    TextStyle(
+                                                                  fontSize: Theme.of(
+                                                                          context)
                                                                       .textTheme
-                                                                      .caption,
+                                                                      .body2
+                                                                      .fontSize,
+                                                                  fontFamily:
+                                                                      'Sans',
+                                                                  color: Theme.of(
+                                                                          context)
+                                                                      .textTheme
+                                                                      .caption
+                                                                      .color,
                                                                 ),
-                                                                SizedBox(
-                                                                  height:
-                                                                      10.0,
-                                                                )
-                                                              ],
-                                                            ),
-                                                          if (index !=
-                                                              0)
-                                                            FlatButton(
-                                                              onPressed:
-                                                                  () {
-                                                                if (index ==
-                                                                    0) {
-                                                                  if (!listSchedule[index]
-                                                                    .isClockIn) {
-                                                                    _gotoMapsPage(
-                                                                        10,
-                                                                        listSchedule[index].shift,
-                                                                        index,
-                                                                        listSchedule[index].startTime);
-                                                                  } else if (listSchedule[index]._active ==
-                                                                      0) {
-                                                                        _showAlertDialog('Attention', 'Are you sure want to break right now?', 20, index);
-                                                                  } else if (listSchedule[index]._active ==
-                                                                      1) {
-                                                                    _gotoMapsPage(
-                                                                        20,
-                                                                        listSchedule[index].shift,
-                                                                        index,
-                                                                        DateTime.now());
-                                                                  } else if (listSchedule[index]._active ==
-                                                                      2) {
-                                                                    _checkTimeNow(
-                                                                        index,
-                                                                        listSchedule[index].shift,
-                                                                        20);
-                                                                  } else if (listSchedule[index]._active ==
-                                                                      3) {
-                                                                    _gotoMapsPage(
-                                                                        30,
-                                                                        listSchedule[index].shift,
-                                                                        index,
-                                                                        DateTime.now());
-                                                                  } else {
-                                                                    _checkTimeNow(
-                                                                        index,
-                                                                        listSchedule[index].shift,
-                                                                        30);
-                                                                  }
-                                                                } else {
-                                                                  _getReminderSet(index);
-                                                                }
-                                                              },
-                                                              child:
-                                                                  Row(
+                                                              ),
+                                                              Row(
+                                                                mainAxisSize:
+                                                                    MainAxisSize
+                                                                        .min,
                                                                 children: <
                                                                     Widget>[
-                                                                  if (index !=
-                                                                      0)
-                                                                    Icon(
-                                                                      Ionicons.ios_notifications_outline,
-                                                                      color: Colors.white,
+                                                                  for (int i =
+                                                                          0;
+                                                                      i < 20;
+                                                                      i++)
+                                                                    Row(
+                                                                      children: <
+                                                                          Widget>[
+                                                                        Container(
+                                                                          width:
+                                                                              3.5,
+                                                                          height:
+                                                                              3.5,
+                                                                          decoration: BoxDecoration(
+                                                                              color: Theme.of(context).textTheme.caption.color,
+                                                                              shape: BoxShape.circle),
+                                                                        ),
+                                                                        if (i <
+                                                                            19)
+                                                                          SizedBox(
+                                                                            width:
+                                                                                5.0,
+                                                                          ),
+                                                                      ],
                                                                     ),
-                                                                  SizedBox(
-                                                                    width:
-                                                                        5.0,
-                                                                  ),
-                                                                  Text(
-                                                                    index == 0
-                                                                        ? listSchedule[index]._active == 0 ? 'Break' : listSchedule[index]._active == 1 ? 'After Break' : listSchedule[index]._active == 2 ? 'Clock Out' : listSchedule[index]._active == 3 ? 'Overtime In' : listSchedule[index]._active == 4 ? 'Overtime Out' : 'Clock in'
-                                                                        : 'Remind Me',
-                                                                    style: TextStyle(
-                                                                        color: Colors.white,
-                                                                        fontFamily: 'Google',
-                                                                        fontWeight: FontWeight.bold),
-                                                                  ),
                                                                 ],
                                                               ),
-                                                              color: index ==
-                                                                      0
-                                                                  ? MediaQuery.of(context).platformBrightness == Brightness.light
-                                                                      ? Colors.indigo
-                                                                      : Colors.indigo[900]
-                                                                  : Theme.of(context).buttonColor,
-                                                              shape: RoundedRectangleBorder(
-                                                                  borderRadius:
-                                                                      BorderRadius.circular(5.0)),
-                                                              splashColor:
-                                                                  Colors
-                                                                      .black26,
-                                                              highlightColor:
-                                                                  Colors
-                                                                      .black26,
-                                                            )
-                                                          else
-                                                            Column(
-                                                              children: <
-                                                                  Widget>[
-                                                                Text(
-                                                                  'Thank You!',
-                                                                  style: Theme.of(context)
+                                                              Text(
+                                                                timeFormat.format(
+                                                                    listSchedule[
+                                                                            index]
+                                                                        .endTime),
+                                                                style:
+                                                                    TextStyle(
+                                                                  fontSize: Theme.of(
+                                                                          context)
                                                                       .textTheme
-                                                                      .caption,
+                                                                      .body2
+                                                                      .fontSize,
+                                                                  fontFamily:
+                                                                      'Sans',
+                                                                  color: Theme.of(
+                                                                          context)
+                                                                      .textTheme
+                                                                      .caption
+                                                                      .color,
                                                                 ),
-                                                                SizedBox(
-                                                                  height:
-                                                                      10.0,
+                                                              ),
+                                                            ],
+                                                          ),
+                                                        ),
+                                                        if (index == 0 &&
+                                                            listSchedule[index]
+                                                                .isClockIn)
+                                                          Column(
+                                                            children: <Widget>[
+                                                              SizedBox(
+                                                                height: 30.0,
+                                                              ),
+                                                              ClipRRect(
+                                                                borderRadius:
+                                                                    BorderRadius
+                                                                        .circular(
+                                                                            5.0),
+                                                                child: Steps(
+                                                                  // direction: 'vertical',
+                                                                  steps: listSchedule[
+                                                                              index]
+                                                                          .isOverTime
+                                                                      ? [
+                                                                          StepItem(
+                                                                              'Clockin'),
+                                                                          StepItem(
+                                                                              'Break'),
+                                                                          StepItem(
+                                                                              'After break'),
+                                                                          StepItem(
+                                                                              'Clockout'),
+                                                                          StepItem(
+                                                                              'Ovt In'),
+                                                                          StepItem(
+                                                                              'Ovt Out'),
+                                                                        ]
+                                                                      : [
+                                                                          StepItem(
+                                                                              'Clockin'),
+                                                                          StepItem(
+                                                                              'Break'),
+                                                                          StepItem(
+                                                                              'After break'),
+                                                                          StepItem(
+                                                                              'Clockout'),
+                                                                        ],
+                                                                  active: listSchedule[
+                                                                          index]
+                                                                      ._active,
+                                                                ),
+                                                              ),
+                                                            ],
+                                                          ),
+                                                        SizedBox(
+                                                          height: 30.0,
+                                                        ),
+                                                        if (listSchedule[index]
+                                                                    .isOverTime &&
+                                                                listSchedule[
+                                                                            index]
+                                                                        ._active <
+                                                                    5 ||
+                                                            !listSchedule[index]
+                                                                    .isClockOut &&
+                                                                listSchedule[
+                                                                            index]
+                                                                        ._active <
+                                                                    5)
+                                                          Row(
+                                                            mainAxisAlignment:
+                                                                MainAxisAlignment
+                                                                    .spaceBetween,
+                                                            children: <Widget>[
+                                                              if (index != 0 &&
+                                                                  !listSchedule[
+                                                                          index]
+                                                                      .isSwitch)
+                                                                FlatButton(
+                                                                  onPressed:
+                                                                      () {
+                                                                    if (collaps) {
+                                                                      _panelController
+                                                                          .open();
+                                                                      setState(
+                                                                          () {
+                                                                        collaps =
+                                                                            false;
+                                                                        indexList =
+                                                                            index;
+                                                                      });
+                                                                    } else {
+                                                                      _panelController
+                                                                          .close();
+                                                                      setState(
+                                                                          () {
+                                                                        collaps =
+                                                                            true;
+                                                                        indexList =
+                                                                            0;
+                                                                      });
+                                                                    }
+                                                                  },
+                                                                  child: Row(
+                                                                    children: <
+                                                                        Widget>[
+                                                                      Icon(
+                                                                        Ionicons
+                                                                            .ios_repeat,
+                                                                        color: Colors
+                                                                            .white,
+                                                                      ),
+                                                                      SizedBox(
+                                                                        width:
+                                                                            5.0,
+                                                                      ),
+                                                                      Text(
+                                                                        'Switch',
+                                                                        style: TextStyle(
+                                                                            color: Colors
+                                                                                .white,
+                                                                            fontFamily:
+                                                                                'Google',
+                                                                            fontWeight:
+                                                                                FontWeight.bold),
+                                                                      ),
+                                                                    ],
+                                                                  ),
+                                                                  color: MediaQuery.of(context)
+                                                                              .platformBrightness ==
+                                                                          Brightness
+                                                                              .light
+                                                                      ? Colors
+                                                                          .orange
+                                                                      : Colors.orange[
+                                                                          300],
+                                                                  shape: RoundedRectangleBorder(
+                                                                      borderRadius:
+                                                                          BorderRadius.circular(
+                                                                              5.0)),
+                                                                  splashColor:
+                                                                      Colors
+                                                                          .black26,
+                                                                  highlightColor:
+                                                                      Colors
+                                                                          .black26,
                                                                 )
-                                                              ],
-                                                            ),
-                                                        ],
-                                                      )
-                                                  ],
-                                                ),
-                                              );
-                                })
-                          else
-                            Column(
-                              children: <Widget>[
-                                FadeUp(
-                                  1.5,
-                                  Container(
-                                    margin: EdgeInsets.only(
-                                        left: 20.0,
-                                        right: 20.0,
-                                        top: 5.0,
-                                        bottom: 20.0),
-                                    padding: EdgeInsets.only(
-                                        left: 16.0,
-                                        right: 16.0,
-                                        top: 16.0,
-                                        bottom: 10.0),
-                                    decoration: BoxDecoration(
-                                        color:
-                                            Theme.of(context).backgroundColor,
-                                        borderRadius:
-                                            BorderRadius.circular(10.0),
-                                        boxShadow: [
-                                          BoxShadow(
-                                              blurRadius: 8.0,
-                                              color: MediaQuery.of(context)
-                                                          .platformBrightness ==
-                                                      Brightness.light
-                                                  ? Colors.black12
-                                                  : Colors.transparent,
-                                              offset: Offset(0.0, 3.0))
-                                        ]),
-                                    child: Column(
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.start,
-                                      children: <Widget>[
-                                        Row(
-                                          children: <Widget>[
-                                            ContentPlaceholder(
-                                              height: 20,
-                                              width: 20,
-                                              spacing: EdgeInsets.zero,
-                                            ),
-                                            SizedBox(
-                                              width: 10.0,
-                                            ),
-                                            ContentPlaceholder(
-                                              height: 20,
-                                              width: 150,
-                                              spacing: EdgeInsets.zero,
-                                            ),
-                                          ],
-                                        ),
-                                        ContentPlaceholder(
-                                          height: 1,
-                                          width: double.infinity,
-                                          spacing: EdgeInsets.zero,
-                                        ),
-                                        SizedBox(
-                                          height: 10.0,
-                                        ),
-                                        ContentPlaceholder(
-                                          height: 28,
-                                          width: 55,
-                                          spacing: EdgeInsets.zero,
-                                        ),
-                                        Row(
-                                          mainAxisAlignment:
-                                              MainAxisAlignment.spaceBetween,
-                                          children: <Widget>[
-                                            ContentPlaceholder(
-                                              height: 18,
-                                              width: 65,
-                                              spacing: EdgeInsets.zero,
-                                            ),
-                                            Row(
-                                              mainAxisSize: MainAxisSize.min,
-                                              children: <Widget>[
-                                                for (int i = 0; i < 20; i++)
-                                                  Row(
-                                                    children: <Widget>[
-                                                      ContentPlaceholder(
-                                                        height: 3.5,
-                                                        width: 3.5,
-                                                        spacing:
-                                                            EdgeInsets.zero,
-                                                      ),
-                                                      if (i < 19)
-                                                        SizedBox(
-                                                          width: 5.0,
+                                                              else
+                                                                Row(
+                                                                  children: <
+                                                                      Widget>[
+                                                                    if (listSchedule[
+                                                                            index]
+                                                                        .isSwitch)
+                                                                      Icon(
+                                                                        FontAwesome
+                                                                            .hourglass_2,
+                                                                        size:
+                                                                            16.0,
+                                                                        color: MediaQuery.of(context).platformBrightness ==
+                                                                                Brightness.light
+                                                                            ? Colors.orange
+                                                                            : Colors.orange[300],
+                                                                      ),
+                                                                    if (listSchedule[
+                                                                            index]
+                                                                        .isSwitch)
+                                                                      SizedBox(
+                                                                        width:
+                                                                            8.0,
+                                                                      ),
+                                                                    Text(
+                                                                      listSchedule[index]._active >=
+                                                                              0
+                                                                          ? 'You late ${listSchedule[index].lateTime} minutes'
+                                                                          : listSchedule[index].isSwitch
+                                                                              ? 'Your switch request\n is being processed'
+                                                                              : '',
+                                                                      style: listSchedule[index]
+                                                                              .isSwitch
+                                                                          ? TextStyle(
+                                                                              color: MediaQuery.of(context).platformBrightness == Brightness.light ? Colors.orange : Colors.orange[300],
+                                                                              fontSize: Theme.of(context).textTheme.caption.fontSize,
+                                                                              fontFamily: 'Sans')
+                                                                          : Theme.of(context).textTheme.caption,
+                                                                    ),
+                                                                  ],
+                                                                ),
+                                                              FlatButton(
+                                                                onPressed: () {
+                                                                  if (index ==
+                                                                      0) {
+                                                                    if (_dateTimeServer.day == DateTime.now().day &&
+                                                                        _dateTimeServer.month ==
+                                                                            DateTime.now()
+                                                                                .month &&
+                                                                        _dateTimeServer.year ==
+                                                                            DateTime.now().year) {
+                                                                      if (!listSchedule[
+                                                                              index]
+                                                                          .isClockIn) {
+                                                                        _gotoMapsPage(
+                                                                            10,
+                                                                            listSchedule[index].shift,
+                                                                            index,
+                                                                            listSchedule[index].startTime);
+                                                                      } else if (listSchedule[index]
+                                                                              ._active ==
+                                                                          0) {
+                                                                        _showAlertDialog(
+                                                                            'Attention',
+                                                                            'Are you sure want to break right now?',
+                                                                            20,
+                                                                            index);
+                                                                      } else if (listSchedule[index]
+                                                                              ._active ==
+                                                                          1) {
+                                                                        _gotoMapsPage(
+                                                                            20,
+                                                                            listSchedule[index].shift,
+                                                                            index,
+                                                                            DateTime.now());
+                                                                      } else if (listSchedule[index]
+                                                                              ._active ==
+                                                                          2) {
+                                                                        _checkTimeNow(
+                                                                            index,
+                                                                            listSchedule[index].shift,
+                                                                            20);
+                                                                      } else if (listSchedule[index]
+                                                                              ._active ==
+                                                                          3) {
+                                                                        _gotoMapsPage(
+                                                                            30,
+                                                                            listSchedule[index].shift,
+                                                                            index,
+                                                                            DateTime.now());
+                                                                      } else {
+                                                                        _gotoMapsPage(
+                                                                            50,
+                                                                            listSchedule[index].shift,
+                                                                            index,
+                                                                            DateTime.now());
+                                                                      }
+                                                                    } else {
+                                                                      _showAlertDialog(
+                                                                          'Hi, $name',
+                                                                          'Your Date Time setting is incorrect! Please set up your Date Time.',
+                                                                          10,
+                                                                          index);
+                                                                    }
+                                                                  } else {
+                                                                    _getReminderSet(
+                                                                        index);
+                                                                  }
+                                                                },
+                                                                child: Row(
+                                                                  children: <
+                                                                      Widget>[
+                                                                    if (index !=
+                                                                        0)
+                                                                      Icon(
+                                                                        Ionicons
+                                                                            .ios_notifications_outline,
+                                                                        color: Colors
+                                                                            .white,
+                                                                      ),
+                                                                    SizedBox(
+                                                                      width:
+                                                                          5.0,
+                                                                    ),
+                                                                    Text(
+                                                                      index == 0
+                                                                          ? listSchedule[index]._active == 0
+                                                                              ? 'Break'
+                                                                              : listSchedule[index]._active == 1 ? 'After Break' : listSchedule[index]._active == 2 ? 'Clock Out' : listSchedule[index]._active == 3 ? 'Overtime In' : listSchedule[index]._active == 4 ? 'Overtime Out' : 'Clock in'
+                                                                          : 'Remind Me',
+                                                                      style: TextStyle(
+                                                                          color: Colors
+                                                                              .white,
+                                                                          fontFamily:
+                                                                              'Google',
+                                                                          fontWeight:
+                                                                              FontWeight.bold),
+                                                                    ),
+                                                                  ],
+                                                                ),
+                                                                color: index ==
+                                                                        0
+                                                                    ? MediaQuery.of(context).platformBrightness ==
+                                                                            Brightness
+                                                                                .light
+                                                                        ? Colors
+                                                                            .indigo
+                                                                        : Colors.indigo[
+                                                                            900]
+                                                                    : Theme.of(
+                                                                            context)
+                                                                        .buttonColor,
+                                                                shape: RoundedRectangleBorder(
+                                                                    borderRadius:
+                                                                        BorderRadius.circular(
+                                                                            5.0)),
+                                                                splashColor:
+                                                                    Colors
+                                                                        .black26,
+                                                                highlightColor:
+                                                                    Colors
+                                                                        .black26,
+                                                              )
+                                                            ],
+                                                          )
+                                                        else
+                                                          Row(
+                                                            mainAxisAlignment:
+                                                                MainAxisAlignment
+                                                                    .spaceBetween,
+                                                            children: <Widget>[
+                                                              if (index != 0)
+                                                                FlatButton(
+                                                                  onPressed:
+                                                                      () {
+                                                                    if (collaps) {
+                                                                      _panelController
+                                                                          .open();
+                                                                      setState(
+                                                                          () {
+                                                                        collaps =
+                                                                            false;
+                                                                      });
+                                                                    } else {
+                                                                      _panelController
+                                                                          .close();
+                                                                      setState(
+                                                                          () {
+                                                                        collaps =
+                                                                            true;
+                                                                      });
+                                                                    }
+                                                                  },
+                                                                  child: Row(
+                                                                    children: <
+                                                                        Widget>[
+                                                                      Icon(
+                                                                        Ionicons
+                                                                            .ios_repeat,
+                                                                        color: Colors
+                                                                            .white,
+                                                                      ),
+                                                                      SizedBox(
+                                                                        width:
+                                                                            5.0,
+                                                                      ),
+                                                                      Text(
+                                                                        'Switch',
+                                                                        style: TextStyle(
+                                                                            color: Colors
+                                                                                .white,
+                                                                            fontFamily:
+                                                                                'Google',
+                                                                            fontWeight:
+                                                                                FontWeight.bold),
+                                                                      ),
+                                                                    ],
+                                                                  ),
+                                                                  color: MediaQuery.of(context)
+                                                                              .platformBrightness ==
+                                                                          Brightness
+                                                                              .light
+                                                                      ? Colors
+                                                                          .orange
+                                                                      : Colors.orange[
+                                                                          300],
+                                                                  shape: RoundedRectangleBorder(
+                                                                      borderRadius:
+                                                                          BorderRadius.circular(
+                                                                              5.0)),
+                                                                  splashColor:
+                                                                      Colors
+                                                                          .black26,
+                                                                  highlightColor:
+                                                                      Colors
+                                                                          .black26,
+                                                                )
+                                                              else
+                                                                Column(
+                                                                  children: <
+                                                                      Widget>[
+                                                                    Text(
+                                                                      'Your Work Finished',
+                                                                      style: Theme.of(
+                                                                              context)
+                                                                          .textTheme
+                                                                          .caption,
+                                                                    ),
+                                                                    SizedBox(
+                                                                      height:
+                                                                          10.0,
+                                                                    )
+                                                                  ],
+                                                                ),
+                                                              if (index != 0)
+                                                                FlatButton(
+                                                                  onPressed:
+                                                                      () {
+                                                                    if (index ==
+                                                                        0) {
+                                                                      if (_dateTimeServer.day == DateTime.now().day &&
+                                                                          _dateTimeServer.month ==
+                                                                              DateTime.now()
+                                                                                  .month &&
+                                                                          _dateTimeServer.year ==
+                                                                              DateTime.now().year) {
+                                                                        if (!listSchedule[index]
+                                                                            .isClockIn) {
+                                                                          _gotoMapsPage(
+                                                                              10,
+                                                                              listSchedule[index].shift,
+                                                                              index,
+                                                                              listSchedule[index].startTime);
+                                                                        } else if (listSchedule[index]._active ==
+                                                                            0) {
+                                                                          _showAlertDialog(
+                                                                              'Attention',
+                                                                              'Are you sure want to break right now?',
+                                                                              20,
+                                                                              index);
+                                                                        } else if (listSchedule[index]._active ==
+                                                                            1) {
+                                                                          _gotoMapsPage(
+                                                                              20,
+                                                                              listSchedule[index].shift,
+                                                                              index,
+                                                                              DateTime.now());
+                                                                        } else if (listSchedule[index]._active ==
+                                                                            2) {
+                                                                          _checkTimeNow(
+                                                                              index,
+                                                                              listSchedule[index].shift,
+                                                                              20);
+                                                                        } else if (listSchedule[index]._active ==
+                                                                            3) {
+                                                                          _gotoMapsPage(
+                                                                              30,
+                                                                              listSchedule[index].shift,
+                                                                              index,
+                                                                              DateTime.now());
+                                                                        } else {
+                                                                          _gotoMapsPage(
+                                                                              50,
+                                                                              listSchedule[index].shift,
+                                                                              index,
+                                                                              DateTime.now());
+                                                                        }
+                                                                      }
+                                                                    } else {
+                                                                      _getReminderSet(
+                                                                          index);
+                                                                    }
+                                                                  },
+                                                                  child: Row(
+                                                                    children: <
+                                                                        Widget>[
+                                                                      if (index !=
+                                                                          0)
+                                                                        Icon(
+                                                                          Ionicons
+                                                                              .ios_notifications_outline,
+                                                                          color:
+                                                                              Colors.white,
+                                                                        ),
+                                                                      SizedBox(
+                                                                        width:
+                                                                            5.0,
+                                                                      ),
+                                                                      Text(
+                                                                        index ==
+                                                                                0
+                                                                            ? listSchedule[index]._active == 0
+                                                                                ? 'Break'
+                                                                                : listSchedule[index]._active == 1 ? 'After Break' : listSchedule[index]._active == 2 ? 'Clock Out' : listSchedule[index]._active == 3 ? 'Overtime In' : listSchedule[index]._active == 4 ? 'Overtime Out' : 'Clock in'
+                                                                            : 'Remind Me',
+                                                                        style: TextStyle(
+                                                                            color: Colors
+                                                                                .white,
+                                                                            fontFamily:
+                                                                                'Google',
+                                                                            fontWeight:
+                                                                                FontWeight.bold),
+                                                                      ),
+                                                                    ],
+                                                                  ),
+                                                                  color: index == 0
+                                                                      ? MediaQuery.of(context).platformBrightness ==
+                                                                              Brightness
+                                                                                  .light
+                                                                          ? Colors
+                                                                              .indigo
+                                                                          : Colors.indigo[
+                                                                              900]
+                                                                      : Theme.of(
+                                                                              context)
+                                                                          .buttonColor,
+                                                                  shape: RoundedRectangleBorder(
+                                                                      borderRadius:
+                                                                          BorderRadius.circular(
+                                                                              5.0)),
+                                                                  splashColor:
+                                                                      Colors
+                                                                          .black26,
+                                                                  highlightColor:
+                                                                      Colors
+                                                                          .black26,
+                                                                )
+                                                              else
+                                                                Column(
+                                                                  children: <
+                                                                      Widget>[
+                                                                    Text(
+                                                                      'Thank You!',
+                                                                      style: Theme.of(
+                                                                              context)
+                                                                          .textTheme
+                                                                          .caption,
+                                                                    ),
+                                                                    SizedBox(
+                                                                      height:
+                                                                          10.0,
+                                                                    )
+                                                                  ],
+                                                                ),
+                                                            ],
+                                                          )
+                                                      ],
+                                                    ),
+                                                  );
+                                  })
+                            else
+                              Column(
+                                children: <Widget>[
+                                  FadeUp(
+                                    1.5,
+                                    Container(
+                                      margin: EdgeInsets.only(
+                                          left: 20.0,
+                                          right: 20.0,
+                                          top: 5.0,
+                                          bottom: 20.0),
+                                      padding: EdgeInsets.only(
+                                          left: 16.0,
+                                          right: 16.0,
+                                          top: 16.0,
+                                          bottom: 10.0),
+                                      decoration: BoxDecoration(
+                                          color:
+                                              Theme.of(context).backgroundColor,
+                                          borderRadius:
+                                              BorderRadius.circular(10.0),
+                                          boxShadow: [
+                                            BoxShadow(
+                                                blurRadius: 8.0,
+                                                color: MediaQuery.of(context)
+                                                            .platformBrightness ==
+                                                        Brightness.light
+                                                    ? Colors.black12
+                                                    : Colors.transparent,
+                                                offset: Offset(0.0, 3.0))
+                                          ]),
+                                      child: Column(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
+                                        children: <Widget>[
+                                          Row(
+                                            children: <Widget>[
+                                              ContentPlaceholder(
+                                                height: 20,
+                                                width: 20,
+                                                spacing: EdgeInsets.zero,
+                                              ),
+                                              SizedBox(
+                                                width: 10.0,
+                                              ),
+                                              ContentPlaceholder(
+                                                height: 20,
+                                                width: 150,
+                                                spacing: EdgeInsets.zero,
+                                              ),
+                                            ],
+                                          ),
+                                          ContentPlaceholder(
+                                            height: 1,
+                                            width: double.infinity,
+                                            spacing: EdgeInsets.zero,
+                                          ),
+                                          SizedBox(
+                                            height: 10.0,
+                                          ),
+                                          ContentPlaceholder(
+                                            height: 28,
+                                            width: 55,
+                                            spacing: EdgeInsets.zero,
+                                          ),
+                                          Row(
+                                            mainAxisAlignment:
+                                                MainAxisAlignment.spaceBetween,
+                                            children: <Widget>[
+                                              ContentPlaceholder(
+                                                height: 18,
+                                                width: 50,
+                                                spacing: EdgeInsets.zero,
+                                              ),
+                                              Row(
+                                                mainAxisSize: MainAxisSize.min,
+                                                children: <Widget>[
+                                                  for (int i = 0; i < 20; i++)
+                                                    Row(
+                                                      children: <Widget>[
+                                                        ContentPlaceholder(
+                                                          height: 3.5,
+                                                          width: 3.5,
+                                                          spacing:
+                                                              EdgeInsets.zero,
                                                         ),
-                                                    ],
-                                                  ),
-                                              ],
-                                            ),
-                                            ContentPlaceholder(
-                                              height: 18,
-                                              width: 65,
-                                              spacing: EdgeInsets.zero,
-                                            ),
-                                          ],
-                                        ),
-                                        SizedBox(
-                                          height: 20.0,
-                                        ),
-                                        Row(
-                                          mainAxisAlignment:
-                                              MainAxisAlignment.spaceBetween,
-                                          children: <Widget>[
-                                            ContentPlaceholder(
-                                              height: 18,
-                                              width: 140,
-                                              spacing: EdgeInsets.zero,
-                                            ),
-                                            ContentPlaceholder(
-                                              height: 38,
-                                              width: 90,
-                                              spacing: EdgeInsets.zero,
-                                            ),
-                                          ],
-                                        )
-                                      ],
+                                                        if (i < 19)
+                                                          SizedBox(
+                                                            width: 5.0,
+                                                          ),
+                                                      ],
+                                                    ),
+                                                ],
+                                              ),
+                                              ContentPlaceholder(
+                                                height: 18,
+                                                width: 50,
+                                                spacing: EdgeInsets.zero,
+                                              ),
+                                            ],
+                                          ),
+                                          SizedBox(
+                                            height: 20.0,
+                                          ),
+                                          Row(
+                                            mainAxisAlignment:
+                                                MainAxisAlignment.spaceBetween,
+                                            children: <Widget>[
+                                              ContentPlaceholder(
+                                                height: 18,
+                                                width: 140,
+                                                spacing: EdgeInsets.zero,
+                                              ),
+                                              ContentPlaceholder(
+                                                height: 38,
+                                                width: 90,
+                                                spacing: EdgeInsets.zero,
+                                              ),
+                                            ],
+                                          )
+                                        ],
+                                      ),
                                     ),
                                   ),
-                                ),
-                                FadeUp(
-                                  2.5,
-                                  Container(
-                                    margin: EdgeInsets.all(
-                                      20.0,
-                                    ),
-                                    padding: EdgeInsets.only(
-                                        left: 16.0,
-                                        right: 16.0,
-                                        top: 16.0,
-                                        bottom: 10.0),
-                                    decoration: BoxDecoration(
-                                        color:
-                                            Theme.of(context).backgroundColor,
-                                        borderRadius:
-                                            BorderRadius.circular(10.0),
-                                        boxShadow: [
-                                          BoxShadow(
-                                              blurRadius: 8.0,
-                                              color: MediaQuery.of(context)
-                                                          .platformBrightness ==
-                                                      Brightness.light
-                                                  ? Colors.black12
-                                                  : Colors.transparent,
-                                              offset: Offset(0.0, 3.0))
-                                        ]),
-                                    child: Column(
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.start,
-                                      children: <Widget>[
-                                        Row(
-                                          children: <Widget>[
-                                            ContentPlaceholder(
-                                              height: 20,
-                                              width: 20,
-                                              spacing: EdgeInsets.zero,
-                                            ),
-                                            SizedBox(
-                                              width: 10.0,
-                                            ),
-                                            ContentPlaceholder(
-                                              height: 20,
-                                              width: 150,
-                                              spacing: EdgeInsets.zero,
-                                            ),
-                                          ],
-                                        ),
-                                        ContentPlaceholder(
-                                          height: 1,
-                                          width: double.infinity,
-                                          spacing: EdgeInsets.zero,
-                                        ),
-                                        SizedBox(
-                                          height: 10.0,
-                                        ),
-                                        ContentPlaceholder(
-                                          height: 28,
-                                          width: 55,
-                                          spacing: EdgeInsets.zero,
-                                        ),
-                                        Row(
-                                          mainAxisAlignment:
-                                              MainAxisAlignment.spaceBetween,
-                                          children: <Widget>[
-                                            ContentPlaceholder(
-                                              height: 18,
-                                              width: 65,
-                                              spacing: EdgeInsets.zero,
-                                            ),
-                                            Row(
-                                              mainAxisSize: MainAxisSize.min,
-                                              children: <Widget>[
-                                                for (int i = 0; i < 20; i++)
-                                                  Row(
-                                                    children: <Widget>[
-                                                      ContentPlaceholder(
-                                                        height: 3.5,
-                                                        width: 3.5,
-                                                        spacing:
-                                                            EdgeInsets.zero,
-                                                      ),
-                                                      if (i < 19)
-                                                        SizedBox(
-                                                          width: 5.0,
+                                  FadeUp(
+                                    2.5,
+                                    Container(
+                                      margin: EdgeInsets.all(
+                                        20.0,
+                                      ),
+                                      padding: EdgeInsets.only(
+                                          left: 16.0,
+                                          right: 16.0,
+                                          top: 16.0,
+                                          bottom: 10.0),
+                                      decoration: BoxDecoration(
+                                          color:
+                                              Theme.of(context).backgroundColor,
+                                          borderRadius:
+                                              BorderRadius.circular(10.0),
+                                          boxShadow: [
+                                            BoxShadow(
+                                                blurRadius: 8.0,
+                                                color: MediaQuery.of(context)
+                                                            .platformBrightness ==
+                                                        Brightness.light
+                                                    ? Colors.black12
+                                                    : Colors.transparent,
+                                                offset: Offset(0.0, 3.0))
+                                          ]),
+                                      child: Column(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
+                                        children: <Widget>[
+                                          Row(
+                                            children: <Widget>[
+                                              ContentPlaceholder(
+                                                height: 20,
+                                                width: 20,
+                                                spacing: EdgeInsets.zero,
+                                              ),
+                                              SizedBox(
+                                                width: 10.0,
+                                              ),
+                                              ContentPlaceholder(
+                                                height: 20,
+                                                width: 150,
+                                                spacing: EdgeInsets.zero,
+                                              ),
+                                            ],
+                                          ),
+                                          ContentPlaceholder(
+                                            height: 1,
+                                            width: double.infinity,
+                                            spacing: EdgeInsets.zero,
+                                          ),
+                                          SizedBox(
+                                            height: 10.0,
+                                          ),
+                                          ContentPlaceholder(
+                                            height: 28,
+                                            width: 55,
+                                            spacing: EdgeInsets.zero,
+                                          ),
+                                          Row(
+                                            mainAxisAlignment:
+                                                MainAxisAlignment.spaceBetween,
+                                            children: <Widget>[
+                                              ContentPlaceholder(
+                                                height: 18,
+                                                width: 50,
+                                                spacing: EdgeInsets.zero,
+                                              ),
+                                              Row(
+                                                mainAxisSize: MainAxisSize.min,
+                                                children: <Widget>[
+                                                  for (int i = 0; i < 20; i++)
+                                                    Row(
+                                                      children: <Widget>[
+                                                        ContentPlaceholder(
+                                                          height: 3.5,
+                                                          width: 3.5,
+                                                          spacing:
+                                                              EdgeInsets.zero,
                                                         ),
-                                                    ],
-                                                  ),
-                                              ],
-                                            ),
-                                            ContentPlaceholder(
-                                              height: 18,
-                                              width: 65,
-                                              spacing: EdgeInsets.zero,
-                                            ),
-                                          ],
-                                        ),
-                                        SizedBox(
-                                          height: 20.0,
-                                        ),
-                                        Row(
-                                          mainAxisAlignment:
-                                              MainAxisAlignment.spaceBetween,
-                                          children: <Widget>[
-                                            ContentPlaceholder(
-                                              height: 38,
-                                              width: 90,
-                                              spacing: EdgeInsets.zero,
-                                            ),
-                                            ContentPlaceholder(
-                                              height: 38,
-                                              width: 90,
-                                              spacing: EdgeInsets.zero,
-                                            ),
-                                          ],
-                                        )
-                                      ],
+                                                        if (i < 19)
+                                                          SizedBox(
+                                                            width: 5.0,
+                                                          ),
+                                                      ],
+                                                    ),
+                                                ],
+                                              ),
+                                              ContentPlaceholder(
+                                                height: 18,
+                                                width: 50,
+                                                spacing: EdgeInsets.zero,
+                                              ),
+                                            ],
+                                          ),
+                                          SizedBox(
+                                            height: 20.0,
+                                          ),
+                                          Row(
+                                            mainAxisAlignment:
+                                                MainAxisAlignment.spaceBetween,
+                                            children: <Widget>[
+                                              ContentPlaceholder(
+                                                height: 38,
+                                                width: 90,
+                                                spacing: EdgeInsets.zero,
+                                              ),
+                                              ContentPlaceholder(
+                                                height: 38,
+                                                width: 90,
+                                                spacing: EdgeInsets.zero,
+                                              ),
+                                            ],
+                                          )
+                                        ],
+                                      ),
                                     ),
                                   ),
-                                ),
-                              ],
-                            ),
+                                ],
+                              ),
                             SizedBox(
                               height: 100.0,
                             ),
@@ -3212,12 +3685,13 @@ class HomePageState extends State<HomePage> {
                             SizedBox(
                               height: MediaQuery.of(context).size.height * 0.15,
                             ),
-                        ],
-                      ),
-                    ],
-                  ),
-                ],
-              )),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ],
+                )),
+              ),
             )),
         onWillPop: _onBackPressed);
   }
