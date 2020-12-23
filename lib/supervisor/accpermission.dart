@@ -35,9 +35,33 @@ class AccPermissionItem {
       this.filePath);
 }
 
+class OprationalItem {
+  String shift;
+  DateTime startfull,
+      endfull,
+      startpart,
+      endpart,
+      startfull2,
+      endfull2,
+      startpart2,
+      endpart2;
+
+  OprationalItem(
+      this.shift,
+      this.startfull,
+      this.endfull,
+      this.startpart,
+      this.endpart,
+      this.startfull2,
+      this.endfull2,
+      this.startpart2,
+      this.endpart2);
+}
+
 class AccPermissionState extends State<AccPermission>
     with AutomaticKeepAliveClientMixin {
   List<AccPermissionItem> listaccpermission = new List<AccPermissionItem>();
+  List<OprationalItem> listJadwal = new List<OprationalItem>();
   final Firestore db = Firestore.instance;
   bool _load = false;
   DateFormat dateFormat = DateFormat.yMMMMEEEEd();
@@ -60,6 +84,52 @@ class AccPermissionState extends State<AccPermission>
     });
   }
 
+  void getOprationalSchedule() async {
+    db
+        .collection('outlet')
+        .where('name', isEqualTo: outlet)
+        .getDocuments()
+        .then((snapshot) {
+      if (snapshot.documents.isNotEmpty) {
+        listJadwal.clear();
+        snapshot.documents.forEach((k) {
+          db
+              .collection('outlet')
+              .document(k.documentID)
+              .collection('oprational')
+              .getDocuments()
+              .then((snapshot2) {
+            if (snapshot2.documents.isNotEmpty) {
+              snapshot2.documents.forEach((f) {
+                Timestamp startfull = f.data['startfull'];
+                Timestamp endfull = f.data['endfull'];
+                Timestamp startpart = f.data['startpart'];
+                Timestamp endpart = f.data['endpart'];
+                Timestamp startfull2 = f.data['startfull2'];
+                Timestamp endfull2 = f.data['endfull2'];
+                Timestamp startpart2 = f.data['startpart2'];
+                Timestamp endpart2 = f.data['endpart2'];
+                OprationalItem item = new OprationalItem(
+                    f.data['name'],
+                    startfull.toDate(),
+                    endfull.toDate(),
+                    startpart.toDate(),
+                    endpart.toDate(),
+                    startfull2.toDate(),
+                    endfull2.toDate(),
+                    startpart2.toDate(),
+                    endpart2.toDate());
+                setState(() {
+                  listJadwal.add(item);
+                });
+              });
+            }
+          });
+        });
+      }
+    });
+  }
+
   void statusUpdate(String id, int value, int index) async {
     dateTime = DateTime.now();
     try {
@@ -74,69 +144,70 @@ class AccPermissionState extends State<AccPermission>
           checkSchedule(
               listaccpermission[index].user,
               listaccpermission[index].startdate,
-              listaccpermission[index].enddate);
-          if(listaccpermission[index].type.toLowerCase() != 'cuti'){
-            await db.collection('history')
-            .document(outlet)
-            .collection('listhistory')
-            .document('${DateTime.now().year}')
-            .collection(listaccpermission[index].user)
-            .document('${DateTime.now().month}')
-            .get()
-            .then((snapshot){
-              if(snapshot.exists){
-                if(snapshot.data['permission'] != null){
-                  db.collection('history')
-                    .document(outlet)
-                    .collection('listhistory')
-                    .document('${DateTime.now().year}')
-                    .collection(listaccpermission[index].user)
-                    .document('${DateTime.now().month}')
-                    .updateData({
-                      'permission' : snapshot.data['permission'] + 1
-                    });
+              listaccpermission[index].enddate,
+              listaccpermission[index].name,
+              listaccpermission[index].type);
+          if (listaccpermission[index].type.toLowerCase() != 'cuti') {
+            await db
+                .collection('history')
+                .document(outlet)
+                .collection('listhistory')
+                .document('${DateTime.now().year}')
+                .collection(listaccpermission[index].user)
+                .document('${DateTime.now().month}')
+                .get()
+                .then((snapshot) {
+              if (snapshot.exists) {
+                if (snapshot.data['permission'] != null) {
+                  db
+                      .collection('history')
+                      .document(outlet)
+                      .collection('listhistory')
+                      .document('${DateTime.now().year}')
+                      .collection(listaccpermission[index].user)
+                      .document('${DateTime.now().month}')
+                      .updateData(
+                          {'permission': snapshot.data['permission'] + 1});
                 } else {
-                  db.collection('history')
-                    .document(outlet)
-                    .collection('listhistory')
-                    .document('${DateTime.now().year}')
-                    .collection(listaccpermission[index].user)
-                    .document('${DateTime.now().month}')
-                    .setData({
-                      'permission' : 1
-                    }, merge: true);
+                  db
+                      .collection('history')
+                      .document(outlet)
+                      .collection('listhistory')
+                      .document('${DateTime.now().year}')
+                      .collection(listaccpermission[index].user)
+                      .document('${DateTime.now().month}')
+                      .setData({'permission': 1}, merge: true);
                 }
               } else {
-                db.collection('history')
-                  .document(outlet)
-                  .collection('listhistory')
-                  .document('${DateTime.now().year}')
-                  .collection(listaccpermission[index].user)
-                  .document('${DateTime.now().month}')
-                  .setData({
-                    'permission' : 1
-                  }, merge: true);
+                db
+                    .collection('history')
+                    .document(outlet)
+                    .collection('listhistory')
+                    .document('${DateTime.now().year}')
+                    .collection(listaccpermission[index].user)
+                    .document('${DateTime.now().month}')
+                    .setData({'permission': 1}, merge: true);
               }
             });
           } else {
-            db.collection('user')
-              .document(outlet)
-              .collection('listuser')
-              .document(listaccpermission[index].user)
-              .collection('${DateTime.now().year}')
-              .document('count')
-              .get()
-              .then((snapshot){
-                db.collection('user')
+            db
+                .collection('user')
+                .document(outlet)
+                .collection('listuser')
+                .document(listaccpermission[index].user)
+                .collection('${DateTime.now().year}')
+                .document('count')
+                .get()
+                .then((snapshot) {
+              db
+                  .collection('user')
                   .document(outlet)
                   .collection('listuser')
                   .document(listaccpermission[index].user)
                   .collection('${DateTime.now().year}')
                   .document('count')
-                  .updateData({
-                    'dayOff' : snapshot.data['dayOff'] + 1
-                  });
-              });
+                  .updateData({'dayOff': snapshot.data['dayOff'] + 1});
+            });
           }
         }
         listaccpermission.clear();
@@ -147,11 +218,12 @@ class AccPermissionState extends State<AccPermission>
     }
   }
 
-  void checkSchedule(String id, String start, String end) async {
+  void checkSchedule(
+      String id, String start, String end, String name, String type) async {
     var startTime = DateFormat('d/M/yyyy').parse(start);
     var endTime = DateFormat('d/M/yyyy').parse(end);
     var loop = (endTime.difference(startTime).inDays) + 1;
-    for (int i = 0; i < 2; i++) {
+    for (int i = 0; i < listJadwal.length; i++) {
       for (int j = 0; j < loop; j++) {
         var dateTime = startTime.add(Duration(days: j));
         await db
@@ -160,7 +232,7 @@ class AccPermissionState extends State<AccPermission>
             .collection('scheduledetail')
             .document('${dateTime.year}')
             .collection('${dateTime.month}')
-            .document('Shift ${i + 1}')
+            .document('${listJadwal[i].shift}')
             .collection('listday')
             .document('${dateTime.day}')
             .collection('liststaff')
@@ -169,22 +241,52 @@ class AccPermissionState extends State<AccPermission>
             .then((snapshot) async {
           if (snapshot.data != null) {
             print(
-                'Tanggal ${dateTime.day}/${dateTime.month}, Shift ${i + 1} ada jadwal cuy...');
+                'Tanggal ${dateTime.day}/${dateTime.month}, ${listJadwal[i].shift} ada jadwal cuy...');
             await db
                 .collection('schedule')
                 .document(outlet)
                 .collection('scheduledetail')
                 .document('${dateTime.year}')
                 .collection('${dateTime.month}')
-                .document('Shift ${i + 1}')
+                .document('${listJadwal[i].shift}')
                 .collection('listday')
                 .document('${dateTime.day}')
                 .collection('liststaff')
                 .document(id)
                 .updateData({'permit': true});
+            if (mounted) {
+              await db
+                  .collection('report')
+                  .document(outlet)
+                  .collection('listreport')
+                  .document('${dateTime.year}')
+                  .collection('${dateTime.month}')
+                  .document(id)
+                  .collection('listreport')
+                  .add({
+                'id': id,
+                'name': name,
+                'shift': '-',
+                'pos': '-',
+                'dayin': type.toLowerCase() != 'cuti' ? 3 : 2,
+                'dayintotaltime': 0,
+                'totalbreaktime': 0,
+                'overtimeday': 0,
+                'overtimetotaltime': 0,
+                'lateday': 0,
+                'latetotaltime': 0,
+                'date': dateTime,
+                'clockin': dateTime,
+                'break': dateTime,
+                'afterbreak': dateTime,
+                'clockout': dateTime,
+                'overtimein': dateTime,
+                'overtimeout': dateTime,
+              });
+            }
           } else {
             print(
-                'Tanggal ${dateTime.day}/${dateTime.month}, Shift ${i + 1} gak ada cuy...');
+                'Tanggal ${dateTime.day}/${dateTime.month}, ${listJadwal[i].shift} gak ada cuy...');
           }
         });
       }

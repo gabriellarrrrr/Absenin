@@ -1,3 +1,4 @@
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_time_picker_spinner/flutter_time_picker_spinner.dart';
@@ -7,12 +8,31 @@ import 'package:absenin/supervisor/liststaff.dart' as staffpage;
 import 'package:shared_preferences/shared_preferences.dart';
 
 class DetailSchedule extends StatefulWidget {
-
   final String id, shift;
   final DateTime date;
-  DateTime startFull, endFull, startPart, endPart;
+  DateTime startFull,
+      endFull,
+      startPart,
+      endPart,
+      startFull2,
+      endFull2,
+      startPart2,
+      endPart2;
 
-  DetailSchedule({Key key, @required this.id, @required this.shift, @required this.date, @required this.startFull, @required this.endFull, @required this.startPart, @required this.endPart}) : super(key: key);
+  DetailSchedule(
+      {Key key,
+      @required this.id,
+      @required this.shift,
+      @required this.date,
+      @required this.startFull,
+      @required this.endFull,
+      @required this.startPart,
+      @required this.endPart,
+      @required this.startFull2,
+      @required this.endFull2,
+      @required this.startPart2,
+      @required this.endPart2})
+      : super(key: key);
 
   @override
   State<StatefulWidget> createState() {
@@ -28,8 +48,10 @@ class StaffItem {
   int type;
   bool check;
   bool overtime;
+  bool otherTime;
 
-  StaffItem(this.id, this.img, this.name, this.part, this.type, this.check, this.overtime);
+  StaffItem(this.id, this.img, this.name, this.part, this.type, this.check,
+      this.overtime, this.otherTime);
 }
 
 class PartItem {
@@ -40,8 +62,7 @@ class PartItem {
 }
 
 class DetailScheduleState extends State<DetailSchedule> {
-
-  Firestore  firestore = Firestore.instance;
+  Firestore firestore = Firestore.instance;
   List<StaffItem> listStaff = new List<StaffItem>();
   List<staffpage.StaffItem> listTemp = new List<staffpage.StaffItem>();
   List<PartItem> listPart = new List<PartItem>();
@@ -53,7 +74,7 @@ class DetailScheduleState extends State<DetailSchedule> {
   DateFormat timeFormat = DateFormat.Hm();
   DateFormat monthFormat = DateFormat.yMMMM();
   DateTime startFullTemp, endFullTemp, startPartTemp, endPartTemp;
-  bool overtimeTemp = false;
+  bool overtimeTemp = false, otherTimeTemp = false;
   String outlet;
 
   PartItem part1 = new PartItem('Inventori', false);
@@ -81,66 +102,85 @@ class DetailScheduleState extends State<DetailSchedule> {
   }
 
   _getListStaff(int action) async {
-    if(action == 20){
+    if (action == 20) {
       setState(() {
         fullTimeCount = 0;
         partTimeCount = 0;
       });
     }
     await firestore
-      .collection('schedule')
-      .document(outlet)
-      .collection('scheduledetail')
-      .document('${widget.date.year}')
-      .collection('${widget.date.month}')
-      .document(widget.shift)
-      .collection('listday')
-      .document(widget.id)
-      .collection('liststaff')
-      .where('switchAcc', isEqualTo: 0)
-      .where('permit', isEqualTo: false)
-      .getDocuments()
-      .then((snapshot){
-        if(snapshot.documents.isEmpty){
-
-        } else {
-          snapshot.documents.forEach((f) async {
-            String name, img;
-            await firestore
-                .collection('user')
-                .document(outlet)
-                .collection('listuser')
-                .document(f.documentID)
-                .get()
-                .then((DocumentSnapshot snapshot) {
-              name = snapshot.data['name'];
-              img = snapshot.data['img'];
-            });
-            if(mounted){
-              StaffItem item = new StaffItem(f.documentID, img, name, f.data['pos'], f.data['type'], false, f.data['isOvertime']);
-              staffpage.StaffItem itemTemp = new staffpage.StaffItem(f.documentID, img, name, 'position', f.data['type'], false, 'phone', 'address', 'email', 'outlet', 'enrol', false);
-              setState(() {
-                if(f.data['type'] == 1){
-                  fullTimeCount++;
-                } else {
-                  partTimeCount++;
-                }
-                listStaff.add(item);
-                listTemp.add(itemTemp);
-              });
-            }
+        .collection('schedule')
+        .document(outlet)
+        .collection('scheduledetail')
+        .document('${widget.date.year}')
+        .collection('${widget.date.month}')
+        .document(widget.shift)
+        .collection('listday')
+        .document(widget.id)
+        .collection('liststaff')
+        .where('switchAcc', isEqualTo: 0)
+        .where('permit', isEqualTo: false)
+        .getDocuments()
+        .then((snapshot) {
+      if (snapshot.documents.isEmpty) {
+      } else {
+        snapshot.documents.forEach((f) async {
+          String name, img;
+          await firestore
+              .collection('user')
+              .document(outlet)
+              .collection('listuser')
+              .document(f.documentID)
+              .get()
+              .then((DocumentSnapshot snapshot) {
+            name = snapshot.data['name'];
+            img = snapshot.data['img'];
           });
-        }
-      });
-      if(mounted){
-        setState(() {
-          if(action == 20){
-            staffSelected = false;
-            staffCountSelected = 0;
-            Navigator.pop(context);
+          if (mounted) {
+            StaffItem item = new StaffItem(
+                f.documentID,
+                img,
+                name,
+                f.data['pos'],
+                f.data['type'],
+                false,
+                f.data['isOvertime'],
+                f.data['otherTime']);
+            staffpage.StaffItem itemTemp = new staffpage.StaffItem(
+                f.documentID,
+                img,
+                name,
+                'position',
+                f.data['type'],
+                false,
+                'phone',
+                'address',
+                'email',
+                'outlet',
+                'enrol',
+                false);
+            setState(() {
+              if (f.data['type'] == 1) {
+                fullTimeCount++;
+              } else {
+                partTimeCount++;
+              }
+              listStaff.add(item);
+              listTemp.add(itemTemp);
+            });
           }
         });
       }
+    });
+    if (mounted) {
+      setState(() {
+        if (action == 20) {
+          staffSelected = false;
+          staffCountSelected = 0;
+          Navigator.pop(context);
+        }
+      });
+    }
   }
 
   _checkVibrate() async {
@@ -150,7 +190,8 @@ class DetailScheduleState extends State<DetailSchedule> {
     });
   }
 
-  _showPostDialog(String title, int position, String shift, bool overtime) async {
+  _showPostDialog(String title, int position, String shift, bool overtime,
+      bool othertime) async {
     final bool result = await showDialog(
         context: context,
         builder: (context) {
@@ -190,11 +231,11 @@ class DetailScheduleState extends State<DetailSchedule> {
                                 style: TextStyle(
                                     fontFamily: 'Google',
                                     fontWeight: FontWeight.bold,
-                                    color:
-                                        MediaQuery.of(context).platformBrightness ==
-                                                Brightness.light
-                                            ? Colors.black54
-                                            : Colors.grey[400]),
+                                    color: MediaQuery.of(context)
+                                                .platformBrightness ==
+                                            Brightness.light
+                                        ? Colors.black54
+                                        : Colors.grey[400]),
                               ),
                             ],
                           ),
@@ -204,7 +245,7 @@ class DetailScheduleState extends State<DetailSchedule> {
                     Padding(
                       padding: EdgeInsets.only(bottom: 8.0),
                       child: ListTile(
-                        onTap: (){
+                        onTap: () {
                           setState(() {
                             overtimeTemp = !overtime;
                             overtime = !overtime;
@@ -217,11 +258,57 @@ class DetailScheduleState extends State<DetailSchedule> {
                           ),
                         ),
                         trailing: Switch(
-                          value: overtime, 
-                          onChanged: (value){
-                            overtimeTemp = value;
-                          }
+                            value: overtime,
+                            onChanged: (value) {
+                              overtimeTemp = value;
+                            }),
+                      ),
+                    ),
+                    Divider(
+                      height: 0.0,
+                    ),
+                    Padding(
+                      padding: const EdgeInsets.only(
+                          left: 15.0, right: 15.0, top: 10.0, bottom: 5.0),
+                      child: Text(
+                        'Set another time',
+                        style: TextStyle(
+                            fontFamily: 'Google',
+                            fontWeight: FontWeight.bold,
+                            color: MediaQuery.of(context).platformBrightness ==
+                                    Brightness.light
+                                ? Colors.black54
+                                : Colors.grey[400]),
+                      ),
+                    ),
+                    Padding(
+                      padding: EdgeInsets.only(bottom: 10.0),
+                      child: ListTile(
+                        onTap: () {
+                          setState(() {
+                            otherTimeTemp = !othertime;
+                            othertime = !othertime;
+                          });
+                        },
+                        title: Text(
+                          listStaff[position].type == 1
+                              ? timeFormat.format(widget.startFull2) +
+                                  ' - ' +
+                                  timeFormat.format(widget.endFull2)
+                              : timeFormat.format(widget.startPart2) +
+                                  ' - ' +
+                                  timeFormat.format(widget.endPart2),
+                          style: TextStyle(
+                            fontFamily: 'Google',
+                          ),
                         ),
+                        trailing: Switch(
+                            value: othertime,
+                            onChanged: (value) {
+                              setState(() {
+                                otherTimeTemp = value;
+                              });
+                            }),
                       ),
                     ),
                     Divider(
@@ -248,52 +335,51 @@ class DetailScheduleState extends State<DetailSchedule> {
                       ],
                     ),
                     ListView.builder(
-                      shrinkWrap: true,
-                      physics: NeverScrollableScrollPhysics(),
-                      itemCount: listPart.length,
-                      itemBuilder: (context, index) {
-                        return Column(
-                          children: <Widget>[
-                            ListTile(
-                              onTap: () {
-                                for (int j = 0; j < listPart.length; j++) {
+                        shrinkWrap: true,
+                        physics: NeverScrollableScrollPhysics(),
+                        itemCount: listPart.length,
+                        itemBuilder: (context, index) {
+                          return Column(
+                            children: <Widget>[
+                              ListTile(
+                                onTap: () {
+                                  for (int j = 0; j < listPart.length; j++) {
+                                    setState(() {
+                                      listPart[j].check = false;
+                                    });
+                                  }
                                   setState(() {
-                                    listPart[j].check = false;
+                                    listPart[index].check =
+                                        !listPart[index].check;
                                   });
-                                }
-                                setState(() {
-                                  listPart[index].check =
-                                      !listPart[index].check;
-                                });
-                              },
-                              leading: Icon(
-                                listPart[index].check
-                                    ? Icons.check_circle
-                                    : Icons.panorama_fish_eye,
-                                size: 20.0,
-                                color: listPart[index].check
-                                    ? MediaQuery.of(context)
-                                                .platformBrightness ==
-                                            Brightness.light
-                                        ? Colors.green
-                                        : Colors.green[400]
-                                    : Theme.of(context).disabledColor,
+                                },
+                                leading: Icon(
+                                  listPart[index].check
+                                      ? Icons.check_circle
+                                      : Icons.panorama_fish_eye,
+                                  size: 20.0,
+                                  color: listPart[index].check
+                                      ? MediaQuery.of(context)
+                                                  .platformBrightness ==
+                                              Brightness.light
+                                          ? Colors.green
+                                          : Colors.green[400]
+                                      : Theme.of(context).disabledColor,
+                                ),
+                                title: Text(
+                                  listPart[index].part,
+                                  style: TextStyle(fontFamily: 'Google'),
+                                ),
                               ),
-                              title: Text(
-                                listPart[index].part,
-                                style: TextStyle(fontFamily: 'Google'),
-                              ),
-                            ),
-                            if (index != listPart.length - 1)
-                              Container(
-                                margin: EdgeInsets.only(left: 70.0),
-                                height: 0.5,
-                                color: Theme.of(context).dividerColor,
-                              )
-                          ],
-                        );
-                      }
-                    ),
+                              if (index != listPart.length - 1)
+                                Container(
+                                  margin: EdgeInsets.only(left: 70.0),
+                                  height: 0.5,
+                                  color: Theme.of(context).dividerColor,
+                                )
+                            ],
+                          );
+                        }),
                     Divider(
                       height: 0.0,
                     ),
@@ -320,36 +406,41 @@ class DetailScheduleState extends State<DetailSchedule> {
         });
     if (result != null) {
       if (result) {
+        String part = '-';
         for (int i = 0; i < listPart.length; i++) {
           if (listPart[i].check) {
-            await firestore
-                  .collection('schedule')
-                  .document(outlet)
-                  .collection('scheduledetail')
-                  .document('${widget.date.year}')
-                  .collection('${widget.date.month}')
-                  .document(widget.shift)
-                  .collection('listday')
-                  .document(widget.id)
-                  .collection('liststaff')
-                  .document(listStaff[position].id)
-                  .updateData({
-                    'pos': listPart[i].part,
-                    'isOvertime': overtimeTemp,
-                  });
-                  if(mounted){
-                    setState(() {
-                      listStaff[position].part = listPart[i].part;
-                      listStaff[position].overtime = overtimeTemp;
-                    });
-                  }
+            part = listPart[i].part;
           }
+        }
+        await firestore
+            .collection('schedule')
+            .document(outlet)
+            .collection('scheduledetail')
+            .document('${widget.date.year}')
+            .collection('${widget.date.month}')
+            .document(widget.shift)
+            .collection('listday')
+            .document(widget.id)
+            .collection('liststaff')
+            .document(listStaff[position].id)
+            .updateData({
+          'pos': part,
+          'isOvertime': overtimeTemp,
+          'otherTime': otherTimeTemp
+        });
+        if (mounted) {
+          setState(() {
+            listStaff[position].part = part;
+            listStaff[position].overtime = overtimeTemp;
+            listStaff[position].otherTime = otherTimeTemp;
+          });
         }
       }
     }
   }
 
-  void _showTimeDialog(String title, DateTime startFull, DateTime endFull, DateTime startPart, DateTime endPart) async {
+  void _showTimeDialog(String title, DateTime startFull, DateTime endFull,
+      DateTime startPart, DateTime endPart) async {
     final bool result = await showDialog(
         context: context,
         builder: (_) => Dialog(
@@ -441,9 +532,7 @@ class DetailScheduleState extends State<DetailSchedule> {
                                     fontWeight: FontWeight.bold),
                                 onTimeChange: (time) {
                                   setState(() {
-                                    if (startFull != time) {
-                                      startFullTemp = time;
-                                    }
+                                    startFullTemp = time;
                                   });
                                 },
                               ),
@@ -500,9 +589,7 @@ class DetailScheduleState extends State<DetailSchedule> {
                                     fontWeight: FontWeight.bold),
                                 onTimeChange: (time) {
                                   setState(() {
-                                    if (endFull != time) {
-                                      endFullTemp = time;
-                                    }
+                                    endFullTemp = time;
                                   });
                                 },
                               ),
@@ -579,9 +666,7 @@ class DetailScheduleState extends State<DetailSchedule> {
                                     fontWeight: FontWeight.bold),
                                 onTimeChange: (time) {
                                   setState(() {
-                                    if (startPart != time) {
-                                      startPartTemp = time;
-                                    }
+                                    startPartTemp = time;
                                   });
                                 },
                               ),
@@ -638,9 +723,7 @@ class DetailScheduleState extends State<DetailSchedule> {
                                     fontWeight: FontWeight.bold),
                                 onTimeChange: (time) {
                                   setState(() {
-                                    if (endPart != time) {
-                                      endPartTemp = time;
-                                    }
+                                    endPartTemp = time;
                                   });
                                 },
                               ),
@@ -672,36 +755,34 @@ class DetailScheduleState extends State<DetailSchedule> {
                   ),
                 )
               ],
-            )
-          )
-        );
-        if(result != null){
-          if(result){
-            await firestore
-                  .collection('schedule')
-                  .document(outlet)
-                  .collection('scheduledetail')
-                  .document('${widget.date.year}')
-                  .collection('${widget.date.month}')
-                  .document(widget.shift)
-                  .collection('listday')
-                  .document(widget.id)
-                  .updateData({
-                    'fullstart': startFullTemp,
-                    'fullend': endFullTemp,
-                    'partstart': startPartTemp,
-                    'partend': endPartTemp
-                  });
-                  if(mounted){
-                    setState(() {
-                      widget.startFull = startFullTemp;
-                      widget.endFull = endFullTemp;
-                      widget.startPart = startPartTemp;
-                      widget.endPart = endPartTemp;
-                    });
-                  }
-          }
+            )));
+    if (result != null) {
+      if (result) {
+        await firestore
+            .collection('schedule')
+            .document(outlet)
+            .collection('scheduledetail')
+            .document('${widget.date.year}')
+            .collection('${widget.date.month}')
+            .document(widget.shift)
+            .collection('listday')
+            .document(widget.id)
+            .updateData({
+          'fullstart': startFullTemp,
+          'fullend': endFullTemp,
+          'partstart': startPartTemp,
+          'partend': endPartTemp
+        });
+        if (mounted) {
+          setState(() {
+            widget.startFull = startFullTemp;
+            widget.endFull = endFullTemp;
+            widget.startPart = startPartTemp;
+            widget.endPart = endPartTemp;
+          });
         }
+      }
+    }
   }
 
   _gotoListStaffPage() async {
@@ -715,54 +796,61 @@ class DetailScheduleState extends State<DetailSchedule> {
       List<StaffItem> newList = new List<StaffItem>();
       if (listTemp.length > 0) {
         for (int i = 0; i < listTemp.length; i++) {
-          StaffItem item = new StaffItem(listTemp[i].id, listTemp[i].img, listTemp[i].name, '', listTemp[i].type, false, false);
+          StaffItem item = new StaffItem(listTemp[i].id, listTemp[i].img,
+              listTemp[i].name, '', listTemp[i].type, false, false, false);
           newList.add(item);
         }
       }
       int fullTime = 0;
       int partTime = 0;
-      for(int i = 0; i < newList.length; i++){
-        for(int j = 0; j < listStaff.length; j++){
-          if(newList[i].id == listStaff[j].id){
+      for (int i = 0; i < newList.length; i++) {
+        for (int j = 0; j < listStaff.length; j++) {
+          if (newList[i].id == listStaff[j].id) {
             newList[i].part = listStaff[j].part;
           }
         }
-        if(newList[i].type == 1){
+        if (newList[i].type == 1) {
           fullTime++;
         } else {
           partTime++;
         }
       }
-      for(int j = 0; j < newList.length; j ++){
-        if(newList[j].part == '' || newList[j].part == null){
+      for (int j = 0; j < newList.length; j++) {
+        if (newList[j].part == '' || newList[j].part == null) {
           await firestore
-                .collection('schedule')
-                .document(outlet)
-                .collection('scheduledetail')
-                .document('${widget.date.year}')
-                .collection('${widget.date.month}')
-                .document(widget.shift)
-                .collection('listday')
-                .document(widget.id)
-                .collection('liststaff')
-                .document(newList[j].id)
-                .setData({
-                  'pos': '-',
-                  'type': newList[j].type,
-                  'clockin': widget.startPart,
-                  'clockout': widget.startPart,
-                  'break': widget.startPart,
-                  'afterbreak': widget.startPart,
-                  'late': 0,
-                  'isClockIn': false,
-                  'isBreak': false,
-                  'isAfterBreak': false,
-                  'isClockOut': false,
-                  'isOvertime': false,
-                  'permit': false,
-                  'switch': false,
-                  'switchAcc': 0
-                });
+              .collection('schedule')
+              .document(outlet)
+              .collection('scheduledetail')
+              .document('${widget.date.year}')
+              .collection('${widget.date.month}')
+              .document(widget.shift)
+              .collection('listday')
+              .document(widget.id)
+              .collection('liststaff')
+              .document(newList[j].id)
+              .setData({
+            'pos': '-',
+            'type': newList[j].type,
+            'otherTime': newList[j].otherTime,
+            'clockin': widget.startPart,
+            'clockout': widget.startPart,
+            'break': widget.startPart,
+            'afterbreak': widget.startPart,
+            'overtimein': widget.startPart,
+            'overtimeout': widget.startPart,
+            'late': 0,
+            'isClockIn': false,
+            'isBreak': false,
+            'isAfterBreak': false,
+            'isClockOut': false,
+            'isOvertime': false,
+            'isOvertimeIn': false,
+            'isOvertimeOut': false,
+            'permit': false,
+            'switch': false,
+            'switchAcc': 0,
+            'switchDate': widget.startPart
+          });
         }
       }
       setState(() {
@@ -813,78 +901,381 @@ class DetailScheduleState extends State<DetailSchedule> {
   }
 
   _deleteStaff() async {
-    for(int i = 0; i < listStaff.length; i++){
-      if(listStaff[i].check){
+    for (int i = 0; i < listStaff.length; i++) {
+      if (listStaff[i].check) {
         await firestore
-              .collection('schedule')
-              .document(outlet)
-              .collection('scheduledetail')
-              .document('${widget.date.year}')
-              .collection('${widget.date.month}')
-              .document(widget.shift)
-              .collection('listday')
-              .document(widget.id)
-              .collection('liststaff')
-              .document(listStaff[i].id)
-              .delete();
+            .collection('schedule')
+            .document(outlet)
+            .collection('scheduledetail')
+            .document('${widget.date.year}')
+            .collection('${widget.date.month}')
+            .document(widget.shift)
+            .collection('listday')
+            .document(widget.id)
+            .collection('liststaff')
+            .document(listStaff[i].id)
+            .delete();
       }
     }
     listStaff.clear();
     listTemp.clear();
     _getListStaff(20);
-
   }
 
   @override
   Widget build(BuildContext context) {
     return WillPopScope(
-      child: Scaffold(
-        appBar: AppBar(
-          title: Text(
-            staffSelected ? '$staffCountSelected' : 'Detail Schedule'
-          ),
-        ),
-        body: SingleChildScrollView(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: <Widget>[
-              ClipRRect(
-                borderRadius: BorderRadius.only(bottomLeft: Radius.circular(20.0), bottomRight: Radius.circular(20.0)),
-                child: Container(
-                  color: Theme.of(context).backgroundColor,
-                  child: Column(
-                    children: <Widget>[
-                      Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
+        child: Scaffold(
+            appBar: AppBar(
+              title: Text(
+                  staffSelected ? '$staffCountSelected' : 'Detail Schedule'),
+            ),
+            body: SingleChildScrollView(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: <Widget>[
+                  ClipRRect(
+                    borderRadius: BorderRadius.only(
+                        bottomLeft: Radius.circular(20.0),
+                        bottomRight: Radius.circular(20.0)),
+                    child: Container(
+                      color: Theme.of(context).backgroundColor,
+                      child: Column(
                         children: <Widget>[
-                          Padding(
-                            padding: const EdgeInsets.only(left: 20.0, right: 20.0, top: 20.0, bottom: 10.0),
-                            child: Column(
+                          Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: <Widget>[
+                              Padding(
+                                padding: const EdgeInsets.only(
+                                    left: 20.0,
+                                    right: 20.0,
+                                    top: 20.0,
+                                    bottom: 10.0),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: <Widget>[
+                                    Text(
+                                      '${widget.id} ${monthFormat.format(widget.date)}',
+                                      style: TextStyle(
+                                          fontFamily: 'Google',
+                                          fontSize: Theme.of(context)
+                                              .textTheme
+                                              .headline
+                                              .fontSize),
+                                    ),
+                                    SizedBox(
+                                      height: 20.0,
+                                    ),
+                                    Row(
+                                      mainAxisAlignment:
+                                          MainAxisAlignment.spaceBetween,
+                                      children: <Widget>[
+                                        SizedBox(
+                                          width: MediaQuery.of(context)
+                                                  .size
+                                                  .width *
+                                              0.12,
+                                          child: Text(
+                                            'Shift',
+                                            style: TextStyle(
+                                                fontFamily: 'Sans',
+                                                fontSize: Theme.of(context)
+                                                    .textTheme
+                                                    .caption
+                                                    .fontSize,
+                                                color: Theme.of(context)
+                                                    .textTheme
+                                                    .caption
+                                                    .color),
+                                          ),
+                                        ),
+                                        Text(
+                                          '${widget.shift}',
+                                          style: TextStyle(
+                                              fontFamily: 'Sans',
+                                              fontSize: Theme.of(context)
+                                                  .textTheme
+                                                  .caption
+                                                  .fontSize,
+                                              color: Theme.of(context)
+                                                  .textTheme
+                                                  .caption
+                                                  .color),
+                                        ),
+                                      ],
+                                    ),
+                                    SizedBox(
+                                      height: 10.0,
+                                    ),
+                                    Divider(
+                                      height: 0.0,
+                                    ),
+                                    SizedBox(
+                                      height: 10.0,
+                                    ),
+                                    Row(
+                                      mainAxisAlignment:
+                                          MainAxisAlignment.spaceBetween,
+                                      children: <Widget>[
+                                        SizedBox(
+                                          width: MediaQuery.of(context)
+                                                  .size
+                                                  .width *
+                                              0.12,
+                                          child: Text(
+                                            'Full Time',
+                                            style: TextStyle(
+                                                fontFamily: 'Sans',
+                                                fontSize: Theme.of(context)
+                                                    .textTheme
+                                                    .caption
+                                                    .fontSize,
+                                                color: Theme.of(context)
+                                                    .textTheme
+                                                    .caption
+                                                    .color),
+                                          ),
+                                        ),
+                                        Text(
+                                          '${timeFormat.format(widget.startFull)} - ${timeFormat.format(widget.endFull)}',
+                                          style: TextStyle(
+                                              fontFamily: 'Sans',
+                                              fontSize: Theme.of(context)
+                                                  .textTheme
+                                                  .caption
+                                                  .fontSize,
+                                              color: Theme.of(context)
+                                                  .textTheme
+                                                  .caption
+                                                  .color),
+                                        ),
+                                      ],
+                                    ),
+                                    SizedBox(
+                                      height: 10.0,
+                                    ),
+                                    Divider(
+                                      height: 0.0,
+                                    ),
+                                    SizedBox(
+                                      height: 10.0,
+                                    ),
+                                    Row(
+                                      mainAxisAlignment:
+                                          MainAxisAlignment.spaceBetween,
+                                      children: <Widget>[
+                                        SizedBox(
+                                          width: MediaQuery.of(context)
+                                                  .size
+                                                  .width *
+                                              0.12,
+                                          child: Text(
+                                            'Part Time',
+                                            style: TextStyle(
+                                                fontFamily: 'Sans',
+                                                fontSize: Theme.of(context)
+                                                    .textTheme
+                                                    .caption
+                                                    .fontSize,
+                                                color: Theme.of(context)
+                                                    .textTheme
+                                                    .caption
+                                                    .color),
+                                          ),
+                                        ),
+                                        Text(
+                                          '${timeFormat.format(widget.startPart)} - ${timeFormat.format(widget.endPart)}',
+                                          style: TextStyle(
+                                              fontFamily: 'Sans',
+                                              fontSize: Theme.of(context)
+                                                  .textTheme
+                                                  .caption
+                                                  .fontSize,
+                                              color: Theme.of(context)
+                                                  .textTheme
+                                                  .caption
+                                                  .color),
+                                        ),
+                                      ],
+                                    ),
+                                    SizedBox(
+                                      height: 10.0,
+                                    ),
+                                    Divider(
+                                      height: 0.0,
+                                    ),
+                                    SizedBox(
+                                      height: 10.0,
+                                    ),
+                                    Center(
+                                      child: FlatButton(
+                                          onPressed: () {
+                                            _showTimeDialog(
+                                                '${widget.id} ${monthFormat.format(widget.date)}',
+                                                widget.startFull,
+                                                widget.endFull,
+                                                widget.startPart,
+                                                widget.endPart);
+                                          },
+                                          textColor:
+                                              Theme.of(context).buttonColor,
+                                          shape: RoundedRectangleBorder(
+                                            borderRadius:
+                                                BorderRadius.circular(5.0),
+                                          ),
+                                          child: Text(
+                                            'Change time',
+                                            style: TextStyle(
+                                              fontFamily: 'Google',
+                                            ),
+                                          )),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          )
+                        ],
+                      ),
+                    ),
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.only(
+                        left: 15.0, right: 15.0, top: 30.0, bottom: 10.0),
+                    child: Text(
+                      'Staff',
+                      style: TextStyle(
+                          fontSize:
+                              Theme.of(context).textTheme.subhead.fontSize,
+                          fontFamily: 'Google',
+                          fontWeight: FontWeight.bold),
+                    ),
+                  ),
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(20.0),
+                    child: Container(
+                      color: Theme.of(context).backgroundColor,
+                      child: Column(
+                        children: <Widget>[
+                          if (listStaff.length > 0)
+                            Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: <Widget>[
-                                Text(
-                                  '${widget.id} ${monthFormat.format(widget.date)}',
-                                  style: TextStyle(
-                                      fontFamily: 'Google',
-                                      fontSize: Theme.of(context)
-                                          .textTheme
-                                          .headline
-                                          .fontSize),
-                                ),
-                                SizedBox(
-                                  height: 20.0,
-                                ),
-                                Row(
-                                  mainAxisAlignment:
-                                      MainAxisAlignment.spaceBetween,
-                                  children: <Widget>[
-                                    SizedBox(
-                                      width: MediaQuery.of(context)
-                                              .size
-                                              .width *
-                                          0.12,
-                                      child: Text(
-                                        'Shift',
+                                Padding(
+                                  padding: const EdgeInsets.only(
+                                      left: 20.0, right: 20.0, top: 20.0),
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: <Widget>[
+                                      Text(
+                                        'Set up for ${listStaff.length} staffs',
+                                        style: TextStyle(
+                                            fontFamily: 'Google',
+                                            fontSize: Theme.of(context)
+                                                .textTheme
+                                                .headline
+                                                .fontSize),
+                                      ),
+                                      SizedBox(
+                                        height: 15.0,
+                                      ),
+                                      Row(
+                                        mainAxisAlignment:
+                                            MainAxisAlignment.spaceBetween,
+                                        children: <Widget>[
+                                          SizedBox(
+                                            width: MediaQuery.of(context)
+                                                    .size
+                                                    .width *
+                                                0.12,
+                                            child: Text(
+                                              'Full time',
+                                              style: TextStyle(
+                                                  fontFamily: 'Sans',
+                                                  fontSize: Theme.of(context)
+                                                      .textTheme
+                                                      .caption
+                                                      .fontSize,
+                                                  color: Theme.of(context)
+                                                      .textTheme
+                                                      .caption
+                                                      .color),
+                                            ),
+                                          ),
+                                          Text(
+                                            '$fullTimeCount staff',
+                                            style: TextStyle(
+                                                fontFamily: 'Sans',
+                                                fontSize: Theme.of(context)
+                                                    .textTheme
+                                                    .caption
+                                                    .fontSize,
+                                                color: Theme.of(context)
+                                                    .textTheme
+                                                    .caption
+                                                    .color),
+                                          ),
+                                        ],
+                                      ),
+                                      SizedBox(
+                                        height: 10.0,
+                                      ),
+                                      Divider(
+                                        height: 0.0,
+                                      ),
+                                      SizedBox(
+                                        height: 10.0,
+                                      ),
+                                      Row(
+                                        mainAxisAlignment:
+                                            MainAxisAlignment.spaceBetween,
+                                        children: <Widget>[
+                                          SizedBox(
+                                            width: MediaQuery.of(context)
+                                                    .size
+                                                    .width *
+                                                0.12,
+                                            child: Text(
+                                              'Part time',
+                                              style: TextStyle(
+                                                  fontFamily: 'Sans',
+                                                  fontSize: Theme.of(context)
+                                                      .textTheme
+                                                      .caption
+                                                      .fontSize,
+                                                  color: Theme.of(context)
+                                                      .textTheme
+                                                      .caption
+                                                      .color),
+                                            ),
+                                          ),
+                                          Text(
+                                            '$partTimeCount staff',
+                                            style: TextStyle(
+                                                fontFamily: 'Sans',
+                                                fontSize: Theme.of(context)
+                                                    .textTheme
+                                                    .caption
+                                                    .fontSize,
+                                                color: Theme.of(context)
+                                                    .textTheme
+                                                    .caption
+                                                    .color),
+                                          ),
+                                        ],
+                                      ),
+                                      SizedBox(
+                                        height: 10.0,
+                                      ),
+                                      Divider(
+                                        height: 0.0,
+                                      ),
+                                      SizedBox(
+                                        height: 10.0,
+                                      ),
+                                      Text(
+                                        'List staff',
                                         style: TextStyle(
                                             fontFamily: 'Sans',
                                             fontSize: Theme.of(context)
@@ -896,557 +1287,203 @@ class DetailScheduleState extends State<DetailSchedule> {
                                                 .caption
                                                 .color),
                                       ),
-                                    ),
-                                    Text(
-                                      '${widget.shift}',
-                                      style: TextStyle(
-                                          fontFamily: 'Sans',
-                                          fontSize: Theme.of(context)
-                                              .textTheme
-                                              .caption
-                                              .fontSize,
-                                          color: Theme.of(context)
-                                              .textTheme
-                                              .caption
-                                              .color),
-                                    ),
-                                  ],
-                                ),
-                                SizedBox(
-                                  height: 10.0,
-                                ),
-                                Divider(
-                                  height: 0.0,
-                                ),
-                                SizedBox(
-                                  height: 10.0,
-                                ),
-                                Row(
-                                  mainAxisAlignment:
-                                      MainAxisAlignment.spaceBetween,
-                                  children: <Widget>[
-                                    SizedBox(
-                                      width: MediaQuery.of(context)
-                                              .size
-                                              .width *
-                                          0.12,
-                                      child: Text(
-                                        'Full start',
-                                        style: TextStyle(
-                                            fontFamily: 'Sans',
-                                            fontSize: Theme.of(context)
-                                                .textTheme
-                                                .caption
-                                                .fontSize,
-                                            color: Theme.of(context)
-                                                .textTheme
-                                                .caption
-                                                .color),
+                                      SizedBox(
+                                        height: 10.0,
                                       ),
-                                    ),
-                                    Text(
-                                      '${timeFormat.format(widget.startFull)}',
-                                      style: TextStyle(
-                                          fontFamily: 'Sans',
-                                          fontSize: Theme.of(context)
-                                              .textTheme
-                                              .caption
-                                              .fontSize,
-                                          color: Theme.of(context)
-                                              .textTheme
-                                              .caption
-                                              .color),
-                                    ),
-                                  ],
-                                ),
-                                SizedBox(
-                                  height: 10.0,
-                                ),
-                                Divider(
-                                  height: 0.0,
-                                ),
-                                SizedBox(
-                                  height: 10.0,
-                                ),
-                                Row(
-                                  mainAxisAlignment:
-                                      MainAxisAlignment.spaceBetween,
-                                  children: <Widget>[
-                                    SizedBox(
-                                      width: MediaQuery.of(context)
-                                              .size
-                                              .width *
-                                          0.12,
-                                      child: Text(
-                                        'Full end',
-                                        style: TextStyle(
-                                            fontFamily: 'Sans',
-                                            fontSize: Theme.of(context)
-                                                .textTheme
-                                                .caption
-                                                .fontSize,
-                                            color: Theme.of(context)
-                                                .textTheme
-                                                .caption
-                                                .color),
+                                      Divider(
+                                        height: 0.0,
                                       ),
-                                    ),
-                                    Text(
-                                      '${timeFormat.format(widget.endFull)}',
-                                      style: TextStyle(
-                                          fontFamily: 'Sans',
-                                          fontSize: Theme.of(context)
-                                              .textTheme
-                                              .caption
-                                              .fontSize,
-                                          color: Theme.of(context)
-                                              .textTheme
-                                              .caption
-                                              .color),
-                                    ),
-                                  ],
+                                    ],
+                                  ),
                                 ),
-                                SizedBox(
-                                  height: 10.0,
+                                ListView.builder(
+                                    shrinkWrap: true,
+                                    physics: NeverScrollableScrollPhysics(),
+                                    itemCount: listStaff.length,
+                                    itemBuilder: (context, index) {
+                                      return Column(
+                                        children: <Widget>[
+                                          Material(
+                                              color: listStaff[index].check
+                                                  ? MediaQuery.of(context)
+                                                              .platformBrightness ==
+                                                          Brightness.light
+                                                      ? Colors.grey[50]
+                                                      : Colors.grey[900]
+                                                  : Colors.transparent,
+                                              child: ListTile(
+                                                onTap: () {
+                                                  if (staffSelected) {
+                                                    if (listStaff[index]
+                                                            .check ==
+                                                        true) {
+                                                      setState(() {
+                                                        listStaff[index].check =
+                                                            false;
+                                                        staffCountSelected--;
+                                                        if (staffCountSelected ==
+                                                            0) {
+                                                          staffSelected = false;
+                                                        }
+                                                      });
+                                                    } else {
+                                                      setState(() {
+                                                        listStaff[index].check =
+                                                            true;
+                                                        staffCountSelected++;
+                                                      });
+                                                    }
+                                                  } else {
+                                                    for (int i = 0;
+                                                        i < listPart.length;
+                                                        i++) {
+                                                      if (listPart[i].part ==
+                                                          listStaff[index]
+                                                              .part) {
+                                                        setState(() {
+                                                          listPart[i].check =
+                                                              true;
+                                                        });
+                                                      } else {
+                                                        setState(() {
+                                                          listPart[i].check =
+                                                              false;
+                                                        });
+                                                      }
+                                                    }
+                                                    _showPostDialog(
+                                                        listStaff[index].name,
+                                                        index,
+                                                        '${widget.id} ${monthFormat.format(widget.date)}',
+                                                        listStaff[index]
+                                                            .overtime,
+                                                        listStaff[index]
+                                                            .otherTime);
+                                                  }
+                                                },
+                                                onLongPress: () {
+                                                  setState(() {
+                                                    listStaff[index].check =
+                                                        true;
+                                                    staffSelected = true;
+                                                    staffCountSelected++;
+                                                  });
+                                                },
+                                                leading: ClipOval(
+                                                    child: CachedNetworkImage(
+                                                  imageUrl:
+                                                      listStaff[index].img,
+                                                  height: 50.0,
+                                                  width: 50.0,
+                                                  fit: BoxFit.cover,
+                                                )
+                                                    //     FadeInImage
+                                                    //         .assetNetwork(
+                                                    //   placeholder:
+                                                    //       'assets/images/absenin.png',
+                                                    //   height: 50.0,
+                                                    //   width: 50.0,
+                                                    //   image: listStaff[index].img,
+                                                    //   fadeInDuration:
+                                                    //       Duration(seconds: 1),
+                                                    //   fit: BoxFit.cover,
+                                                    // )
+                                                    ),
+                                                title: Text(
+                                                  listStaff[index].name,
+                                                  style: TextStyle(
+                                                      fontFamily: 'Google'),
+                                                ),
+                                                subtitle: Text(
+                                                  listStaff[index].part != '' &&
+                                                          listStaff[index]
+                                                                  .part !=
+                                                              '-'
+                                                      ? listStaff[index].part
+                                                      : 'Part = not set',
+                                                  style: TextStyle(
+                                                      fontFamily: 'Sans'),
+                                                ),
+                                                trailing: listStaff[index].check
+                                                    ? Icon(
+                                                        Icons.check_circle,
+                                                        size: 18.0,
+                                                        color: MediaQuery.of(
+                                                                        context)
+                                                                    .platformBrightness ==
+                                                                Brightness.light
+                                                            ? Colors.green
+                                                            : Colors.green[400],
+                                                      )
+                                                    : null,
+                                              )),
+                                          if (index != listStaff.length - 1)
+                                            Container(
+                                              height: 0.5,
+                                              margin: EdgeInsets.only(
+                                                  left: 80.0, right: 20.0),
+                                              color: Theme.of(context)
+                                                  .dividerColor,
+                                            )
+                                        ],
+                                      );
+                                    }),
+                                Container(
+                                  width: double.infinity,
+                                  height: 0.5,
+                                  color: Theme.of(context).dividerColor,
+                                  margin:
+                                      EdgeInsets.only(left: 20.0, right: 20.0),
                                 ),
-                                Divider(
-                                  height: 0.0,
-                                ),
-                                SizedBox(
-                                  height: 10.0,
-                                ),
-                                Row(
-                                  mainAxisAlignment:
-                                      MainAxisAlignment.spaceBetween,
-                                  children: <Widget>[
-                                    SizedBox(
-                                      width: MediaQuery.of(context)
-                                              .size
-                                              .width *
-                                          0.12,
-                                      child: Text(
-                                        'Part start',
-                                        style: TextStyle(
-                                            fontFamily: 'Sans',
-                                            fontSize: Theme.of(context)
-                                                .textTheme
-                                                .caption
-                                                .fontSize,
-                                            color: Theme.of(context)
-                                                .textTheme
-                                                .caption
-                                                .color),
-                                      ),
-                                    ),
-                                    Text(
-                                      '${timeFormat.format(widget.startPart)}',
-                                      style: TextStyle(
-                                          fontFamily: 'Sans',
-                                          fontSize: Theme.of(context)
-                                              .textTheme
-                                              .caption
-                                              .fontSize,
-                                          color: Theme.of(context)
-                                              .textTheme
-                                              .caption
-                                              .color),
-                                    ),
-                                  ],
-                                ),
-                                SizedBox(
-                                  height: 10.0,
-                                ),
-                                Divider(
-                                  height: 0.0,
-                                ),
-                                SizedBox(
-                                  height: 10.0,
-                                ),
-                                Row(
-                                  mainAxisAlignment:
-                                      MainAxisAlignment.spaceBetween,
-                                  children: <Widget>[
-                                    SizedBox(
-                                      width: MediaQuery.of(context)
-                                              .size
-                                              .width *
-                                          0.12,
-                                      child: Text(
-                                        'Part end',
-                                        style: TextStyle(
-                                            fontFamily: 'Sans',
-                                            fontSize: Theme.of(context)
-                                                .textTheme
-                                                .caption
-                                                .fontSize,
-                                            color: Theme.of(context)
-                                                .textTheme
-                                                .caption
-                                                .color),
-                                      ),
-                                    ),
-                                    Text(
-                                      '${timeFormat.format(widget.endPart)}',
-                                      style: TextStyle(
-                                          fontFamily: 'Sans',
-                                          fontSize: Theme.of(context)
-                                              .textTheme
-                                              .caption
-                                              .fontSize,
-                                          color: Theme.of(context)
-                                              .textTheme
-                                              .caption
-                                              .color),
-                                    ),
-                                  ],
-                                ),
-                                SizedBox(
-                                  height: 10.0,
-                                ),
-                                Divider(height: 0.0,),
                                 SizedBox(
                                   height: 10.0,
                                 ),
                                 Center(
                                   child: FlatButton(
-                                    onPressed: () {
-                                      _showTimeDialog('${widget.id} ${monthFormat.format(widget.date)}', widget.startFull, widget.endFull, widget.startPart, widget.endPart);
-                                    },
-                                    textColor: Theme.of(context).buttonColor,
-                                    shape: RoundedRectangleBorder(
-                                      borderRadius: BorderRadius.circular(5.0),
-                                    ),
-                                    child: Text(
-                                      'Change time',
-                                      style: TextStyle(
-                                        fontFamily: 'Google',
+                                      onPressed: () {
+                                        if (staffSelected) {
+                                          _prosesDialog();
+                                          _deleteStaff();
+                                        } else {
+                                          _gotoListStaffPage();
+                                        }
+                                      },
+                                      textColor: staffSelected
+                                          ? MediaQuery.of(context)
+                                                      .platformBrightness ==
+                                                  Brightness.light
+                                              ? Colors.red
+                                              : Colors.red[300]
+                                          : Theme.of(context).buttonColor,
+                                      shape: RoundedRectangleBorder(
+                                        borderRadius:
+                                            BorderRadius.circular(5.0),
                                       ),
-                                    )),
+                                      child: Text(
+                                        staffSelected
+                                            ? 'Delete staff'
+                                            : 'Add staff',
+                                        style: TextStyle(
+                                          fontFamily: 'Google',
+                                        ),
+                                      )),
+                                ),
+                                SizedBox(
+                                  height: 10.0,
                                 ),
                               ],
-                            ),
-                          ),
+                            )
                         ],
-                      )
-                    ],
+                      ),
+                    ),
                   ),
-                ),
+                  SizedBox(
+                    height: MediaQuery.of(context).size.height * 0.5,
+                  )
+                ],
               ),
-              Padding(
-                padding: const EdgeInsets.only(
-                    left: 15.0, right: 15.0, top: 30.0, bottom: 10.0),
-                child: Text(
-                  'Staff',
-                  style: TextStyle(
-                      fontSize: Theme.of(context).textTheme.subhead.fontSize,
-                      fontFamily: 'Google',
-                      fontWeight: FontWeight.bold),
-                ),
-              ),
-              ClipRRect(
-                borderRadius: BorderRadius.circular(20.0),
-                child: Container(
-                  color: Theme.of(context).backgroundColor,
-                  child: Column(
-                    children: <Widget>[
-                      if (listStaff.length > 0)
-                      Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: <Widget>[
-                          Padding(
-                            padding: const EdgeInsets.only(
-                                left: 20.0, right: 20.0, top: 20.0),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: <Widget>[
-                                Text(
-                                  'Set up for ${listStaff.length} staffs',
-                                  style: TextStyle(
-                                      fontFamily: 'Google',
-                                      fontSize: Theme.of(context)
-                                          .textTheme
-                                          .headline
-                                          .fontSize),
-                                ),
-                                SizedBox(
-                                  height: 15.0,
-                                ),
-                                Row(
-                                  mainAxisAlignment:
-                                      MainAxisAlignment.spaceBetween,
-                                  children: <Widget>[
-                                    SizedBox(
-                                      width: MediaQuery.of(context)
-                                              .size
-                                              .width *
-                                          0.12,
-                                      child: Text(
-                                        'Full time',
-                                        style: TextStyle(
-                                            fontFamily: 'Sans',
-                                            fontSize: Theme.of(context)
-                                                .textTheme
-                                                .caption
-                                                .fontSize,
-                                            color: Theme.of(context)
-                                                .textTheme
-                                                .caption
-                                                .color),
-                                      ),
-                                    ),
-                                    Text(
-                                      '$fullTimeCount staff',
-                                      style: TextStyle(
-                                          fontFamily: 'Sans',
-                                          fontSize: Theme.of(context)
-                                              .textTheme
-                                              .caption
-                                              .fontSize,
-                                          color: Theme.of(context)
-                                              .textTheme
-                                              .caption
-                                              .color),
-                                    ),
-                                  ],
-                                ),
-                                SizedBox(
-                                  height: 10.0,
-                                ),
-                                Divider(
-                                  height: 0.0,
-                                ),
-                                SizedBox(
-                                  height: 10.0,
-                                ),
-                                Row(
-                                  mainAxisAlignment:
-                                      MainAxisAlignment.spaceBetween,
-                                  children: <Widget>[
-                                    SizedBox(
-                                      width: MediaQuery.of(context)
-                                              .size
-                                              .width *
-                                          0.12,
-                                      child: Text(
-                                        'Part time',
-                                        style: TextStyle(
-                                            fontFamily: 'Sans',
-                                            fontSize: Theme.of(context)
-                                                .textTheme
-                                                .caption
-                                                .fontSize,
-                                            color: Theme.of(context)
-                                                .textTheme
-                                                .caption
-                                                .color),
-                                      ),
-                                    ),
-                                    Text(
-                                      '$partTimeCount staff',
-                                      style: TextStyle(
-                                          fontFamily: 'Sans',
-                                          fontSize: Theme.of(context)
-                                              .textTheme
-                                              .caption
-                                              .fontSize,
-                                          color: Theme.of(context)
-                                              .textTheme
-                                              .caption
-                                              .color),
-                                    ),
-                                  ],
-                                ),
-                                SizedBox(
-                                  height: 10.0,
-                                ),
-                                Divider(
-                                  height: 0.0,
-                                ),
-                                SizedBox(
-                                  height: 10.0,
-                                ),
-                                Text(
-                                  'List staff',
-                                  style: TextStyle(
-                                      fontFamily: 'Sans',
-                                      fontSize: Theme.of(context)
-                                          .textTheme
-                                          .caption
-                                          .fontSize,
-                                      color: Theme.of(context)
-                                          .textTheme
-                                          .caption
-                                          .color),
-                                ),
-                                SizedBox(
-                                  height: 10.0,
-                                ),
-                                Divider(
-                                  height: 0.0,
-                                ),
-                              ],
-                            ),
-                          ),
-                          ListView.builder(
-                              shrinkWrap: true,
-                              physics: NeverScrollableScrollPhysics(),
-                              itemCount: listStaff.length,
-                              itemBuilder: (context, index) {
-                                return Column(
-                                  children: <Widget>[
-                                    Material(
-                                        color: listStaff[index].check
-                                            ? MediaQuery.of(context)
-                                                        .platformBrightness ==
-                                                    Brightness.light
-                                                ? Colors.grey[50]
-                                                : Colors.grey[900]
-                                            : Colors.transparent,
-                                        child: ListTile(
-                                          onTap: () {
-                                            if (staffSelected) {
-                                              if (listStaff[index].check ==
-                                                  true) {
-                                                setState(() {
-                                                  listStaff[index].check =
-                                                      false;
-                                                  staffCountSelected--;
-                                                  if (staffCountSelected ==
-                                                      0) {
-                                                    staffSelected = false;
-                                                  }
-                                                });
-                                              } else {
-                                                setState(() {
-                                                  listStaff[index].check =
-                                                      true;
-                                                  staffCountSelected++;
-                                                });
-                                              }
-                                            } else {
-                                              for (int i = 0;
-                                                  i < listPart.length;
-                                                  i++) {
-                                                if (listPart[i].part ==
-                                                    listStaff[index].part) {
-                                                  setState(() {
-                                                    listPart[i].check =
-                                                        true;
-                                                  });
-                                                } else {
-                                                  setState(() {
-                                                    listPart[i].check =
-                                                        false;
-                                                  });
-                                                }
-                                              }
-                                              _showPostDialog(listStaff[index].name, index, '${widget.id} ${monthFormat.format(widget.date)}', listStaff[index].overtime);
-                                            }
-                                          },
-                                          onLongPress: () {
-                                            setState(() {
-                                              listStaff[index].check = true;
-                                              staffSelected = true;
-                                              staffCountSelected++;
-                                            });
-                                          },
-                                          leading: ClipOval(
-                                              child:
-                                                  FadeInImage.assetNetwork(
-                                            placeholder:
-                                                'assets/images/absenin.png',
-                                            height: 50.0,
-                                            width: 50.0,
-                                            image: listStaff[index].img,
-                                            fadeInDuration:
-                                                Duration(seconds: 1),
-                                            fit: BoxFit.cover,
-                                          )),
-                                          title: Text(
-                                            listStaff[index].name,
-                                            style: TextStyle(
-                                                fontFamily: 'Google'),
-                                          ),
-                                          subtitle: Text(
-                                            listStaff[index].part != '' && listStaff[index].part != '-'
-                                                ? listStaff[index].part
-                                                : 'Part = not set',
-                                            style: TextStyle(
-                                                fontFamily: 'Sans'),
-                                          ),
-                                          trailing: listStaff[index].check
-                                              ? Icon(
-                                                  Icons.check_circle,
-                                                  size: 18.0,
-                                                  color: MediaQuery.of(
-                                                                  context)
-                                                              .platformBrightness ==
-                                                          Brightness.light
-                                                      ? Colors.green
-                                                      : Colors.green[400],
-                                                )
-                                              : null,
-                                        )),
-                                    if (index != listStaff.length - 1)
-                                      Container(
-                                        height: 0.5,
-                                        margin: EdgeInsets.only(
-                                            left: 80.0, right: 20.0),
-                                        color:
-                                            Theme.of(context).dividerColor,
-                                      )
-                                  ],
-                                );
-                              }
-                            ),
-                            Container(
-                              width: double.infinity,
-                              height: 0.5,
-                              color: Theme.of(context).dividerColor,
-                              margin: EdgeInsets.only(left: 20.0, right: 20.0),
-                            ),
-                            SizedBox(
-                              height: 10.0,
-                            ),
-                            Center(
-                              child: FlatButton(
-                                onPressed: () {
-                                  if(staffSelected){
-                                    _prosesDialog();
-                                    _deleteStaff();
-                                  } else {
-                                    _gotoListStaffPage();
-                                  }
-                                },
-                                textColor: staffSelected ? MediaQuery.of(context).platformBrightness == Brightness.light ? Colors.red : Colors.red[300] : Theme.of(context).buttonColor,
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(5.0),
-                                ),
-                                child: Text(
-                                  staffSelected ? 'Delete staff' : 'Add staff',
-                                  style: TextStyle(
-                                    fontFamily: 'Google',
-                                  ),
-                                )
-                              ),
-                            ),
-                            SizedBox(
-                              height: 10.0,
-                            ),
-                        ],
-                      )
-                    ],
-                  ),
-                ),
-              ),
-              SizedBox(
-                height: MediaQuery.of(context).size.height * 0.5,
-              )
-            ],
-          ),
-        )
-      ),
-      onWillPop: () async {
+            )),
+        onWillPop: () async {
           bool exit = false;
           if (staffSelected) {
             if (staffSelected) {
@@ -1466,8 +1503,7 @@ class DetailScheduleState extends State<DetailSchedule> {
             Navigator.pop(context);
           }
           return exit;
-        }
-    );
+        });
   }
 
   Route _createRoute(Widget destination) {

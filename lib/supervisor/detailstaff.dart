@@ -1,5 +1,6 @@
 import 'package:absenin/supervisor/addstaf.dart';
 import 'package:absenin/user/photoview.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_icons/flutter_icons.dart';
@@ -7,6 +8,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:fluttertoast/fluttertoast.dart';
 import 'package:mailer/mailer.dart';
 import 'package:mailer/smtp_server/gmail.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class DetailStaff extends StatefulWidget {
   final String id, name, position, outlet, phone, address, emails, enrol, img;
@@ -37,18 +39,42 @@ class DetailStaff extends StatefulWidget {
 class DetailStaffState extends State<DetailStaff> {
   final Firestore firestore = Firestore.instance;
   final FirebaseAuth auth = FirebaseAuth.instance;
+  String url_downloadApp;
+  bool update = false;
+  String urlImg;
+
+  @override
+  void initState() {
+    super.initState();
+    _getDataUserFromPref();
+  }
+
+  _getDataUserFromPref() async {
+    SharedPreferences prefs = await SharedPreferences.getInstance();
+    setState(() {
+      url_downloadApp = prefs.getString('d_absenin');
+    });
+  }
 
   void deleteAccount() async {
-    if(widget.signin){
-      await firestore.collection('user').document(widget.id).updateData({
-        'delete': true
-      });
+    if (widget.signin) {
+      await firestore
+          .collection('user')
+          .document(widget.outlet)
+          .collection('listuser')
+          .document(widget.id)
+          .updateData({'delete': true});
       if (mounted) {
         Navigator.pop(context);
         Navigator.pop(context, true);
       }
     } else {
-      await firestore.collection('user').document(widget.id).delete();
+      await firestore
+          .collection('user')
+          .document(widget.outlet)
+          .collection('listuser')
+          .document(widget.id)
+          .delete();
       if (mounted) {
         Navigator.pop(context);
         Navigator.pop(context, true);
@@ -72,16 +98,19 @@ class DetailStaffState extends State<DetailStaff> {
     final message = Message()
       ..from = Address(username, 'Absenin Official')
       ..recipients.add('${widget.emails}')
-      ..subject = "Hi ${widget.name}. Here's your Absenin Account"
+      ..subject = "Hi! ${widget.name}. Here's your Absenin Account"
       ..html =
-          "<h1>Welcome to Absenin!</h1><br><br><center><img src='https://i.ibb.co/9nk62sz/Group-29.png' width='235'></center><br><br><p style='font-size: 18px'><b>This is your Account😊</b></p><p style='font-size: 14px'>Email : <span style='font-size: 20px; font-weight: bold'>${widget.emails}</span></p><p style='font-size: 14px'>Enrol Key : <span style='font-size: 20px; font-weight: bold'>${widget.enrol}</span></p><br><br><br><center><button style='background-color: #37474f; color: white; border-radius: 8px; padding: 8px 20px; text-align: center; text-decoration: none; margin: 2px;'>Download App</button></center><p style='text-align: center;'><i>Open Your Apps and Enjoy!</i> \u00a9 2020 Absenin</p>";
+          "<h1>Welcome to Absenin!</h1><br><br><center><img src='https://i.ibb.co/9nk62sz/Group-29.png' width='235'></center><br><br><p style='font-size: 18px'><b>This is your Account😊</b></p><p style='font-size: 14px'>Email : <span style='font-size: 20px; font-weight: bold'>${widget.emails}</span></p><p style='font-size: 14px'>Enrol Key : <span style='font-size: 20px; font-weight: bold'>${widget.enrol}</span></p><br><br><br><center><button style='background-color: #37474f; color: white; border-radius: 8px; padding: 8px 20px; text-align: center; text-decoration: none; margin: 2px;'><a href ='$url_downloadApp'>Download App</a></button></center><p style='text-align: center;'><i>Open Your Apps and Enjoy!</i> \u00a9 2020 Absenin</p>";
 
     try {
       final sendReport = await send(message, smtpServer);
-      showCenterShortToast('Enrol Sent!');
+      Navigator.pop(context);
+      showCenterShortToast('Succes sent enrol to ${widget.emails}');
       print('Message sent: ' + sendReport.toString());
     } on MailerException catch (e) {
       print('Message not sent.');
+      Navigator.pop(context);
+      showCenterShortToast('Failed sent enrol! Try again');
       for (var p in e.problems) {
         print('Problem: ${p.code}: ${p.msg}');
       }
@@ -270,13 +299,24 @@ class DetailStaffState extends State<DetailStaff> {
               child: Column(
                 children: <Widget>[
                   GestureDetector(
-                      onTap: () {
-                        Navigator.push(
+                      onTap: () async {
+                        final result = await Navigator.push(
                             context,
                             MaterialPageRoute(
                                 builder: (context) => PhotoPage(
                                       urlImg: widget.img,
+                                      id: widget.id,
+                                      outlet: widget.outlet,
+                                      nama: widget.name,
                                     )));
+                        if (result != null) {
+                          if (result != 'null') {
+                            setState(() {
+                              urlImg = result;
+                              update = true;
+                            });
+                          }
+                        }
                       },
                       child: Hero(
                         tag: 'photo',
@@ -286,14 +326,21 @@ class DetailStaffState extends State<DetailStaff> {
                               shape: BoxShape.circle,
                               color: Theme.of(context).dividerColor),
                           child: ClipOval(
-                              child: FadeInImage.assetNetwork(
-                            placeholder: 'assets/images/absenin.png',
+                              child: CachedNetworkImage(
+                            imageUrl: update ? urlImg : widget.img,
                             height: 100.0,
                             width: 100.0,
-                            image: widget.img,
-                            fadeInDuration: Duration(seconds: 1),
                             fit: BoxFit.cover,
-                          )),
+                          )
+                              //     FadeInImage.assetNetwork(
+                              //   placeholder: 'assets/images/absenin.png',
+                              //   height: 100.0,
+                              //   width: 100.0,
+                              //   image: update ? urlImg : widget.img,
+                              //   fadeInDuration: Duration(seconds: 1),
+                              //   fit: BoxFit.cover,
+                              // )
+                              ),
                         ),
                       )),
                   SizedBox(
@@ -353,7 +400,7 @@ class DetailStaffState extends State<DetailStaff> {
                           : Colors.indigoAccent[100],
                     ),
                     title: Text(
-                      'Front Liner',
+                      widget.type == 1 ? 'Full Time' : 'Part Time',
                       style: TextStyle(
                         fontFamily: 'Google',
                         fontSize: Theme.of(context).textTheme.subhead.fontSize,
@@ -381,14 +428,20 @@ class DetailStaffState extends State<DetailStaff> {
                               Theme.of(context).textTheme.subhead.fontSize,
                         ),
                       ),
-                      trailing: IconButton(
-                          icon: Icon(
-                            FontAwesome.share_alt,
-                            size: 18,
-                          ),
-                          onPressed: () {
-                            _sendEmail();
-                          })),
+                      trailing: ClipOval(
+                        child: Material(
+                          color: Colors.transparent,
+                          child: IconButton(
+                              icon: Icon(
+                                FontAwesome.share_alt,
+                                size: 18,
+                              ),
+                              onPressed: () {
+                                _prosesDialog();
+                                _sendEmail();
+                              }),
+                        ),
+                      )),
                 ],
               ),
             ),

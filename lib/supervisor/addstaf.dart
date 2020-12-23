@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:country_list_pick/country_list_pick.dart';
 import 'package:firebase_storage/firebase_storage.dart';
@@ -47,6 +48,8 @@ class AddStafState extends State<AddStaf> {
   final phoneController = TextEditingController();
   final addressController = TextEditingController();
 
+  bool _buttonActive = false;
+
   @override
   void initState() {
     super.initState();
@@ -57,14 +60,50 @@ class AddStafState extends State<AddStaf> {
         emailController.text = widget.emails;
         phoneController.text = widget.phone.substring(3, (widget.phone.length));
         addressController.text = widget.address;
-        _outlet = widget.outlet;
+        outlet = widget.outlet;
         _position = widget.position;
         if (widget.type == 1) {
           _typeStaff = 'Full Time';
         } else {
           _typeStaff = 'Part Time';
         }
+        _buttonActive = true;
       });
+    }
+  }
+
+  enableButton() {
+    if (widget.action == 20) {
+      if (nameController.text != '' &&
+          emailController.text != '' &&
+          phoneController.text != '' &&
+          addressController.text != '' &&
+          _typeStaff != null &&
+          _position != null) {
+        setState(() {
+          _buttonActive = true;
+        });
+      } else {
+        setState(() {
+          _buttonActive = false;
+        });
+      }
+    } else {
+      if (nameController.text != '' &&
+          emailController.text != '' &&
+          phoneController.text != '' &&
+          addressController.text != '' &&
+          _image != null &&
+          _typeStaff != null &&
+          _position != null) {
+        setState(() {
+          _buttonActive = true;
+        });
+      } else {
+        setState(() {
+          _buttonActive = false;
+        });
+      }
     }
   }
 
@@ -74,7 +113,6 @@ class AddStafState extends State<AddStaf> {
   ];
 
   List positionStaff = [
-    'Kasir',
     'Karyawan',
   ];
 
@@ -83,7 +121,6 @@ class AddStafState extends State<AddStaf> {
     'Full Time',
   ];
 
-  String _outlet;
   String _position;
   bool autoVal = false;
   String _typeStaff;
@@ -95,6 +132,7 @@ class AddStafState extends State<AddStaf> {
   String dialcode = '+62';
   String urlImg;
   String outlet;
+  String url_downloadApp;
 
   final Firestore firestore = Firestore.instance;
   final StorageReference fs = FirebaseStorage.instance.ref();
@@ -103,6 +141,7 @@ class AddStafState extends State<AddStaf> {
     SharedPreferences prefs = await SharedPreferences.getInstance();
     setState(() {
       outlet = prefs.getString('outletUser');
+      url_downloadApp = prefs.getString('d_absenin');
     });
   }
 
@@ -116,11 +155,11 @@ class AddStafState extends State<AddStaf> {
       type = 2;
     }
     await firestore
-    .collection('user')
-    .document(outlet)
-    .collection('listuser')
-    .add({
-      'outlet': _outlet,
+        .collection('user')
+        .document(outlet)
+        .collection('listuser')
+        .add({
+      'outlet': outlet,
       'position': _position,
       'name': nameController.text,
       'email': emailController.text,
@@ -134,17 +173,15 @@ class AddStafState extends State<AddStaf> {
       'isSignin': false,
       'role': 1,
       'delete': false
-    }).then((data){
+    }).then((data) {
       firestore
-        .collection('user')
-        .document(outlet)
-        .collection('listuser')
-        .document(data.documentID)
-        .collection('${DateTime.now().year}')
-        .document('count')
-        .setData({
-        'dayOff' : 0
-      });
+          .collection('user')
+          .document(outlet)
+          .collection('listuser')
+          .document(data.documentID)
+          .collection('${DateTime.now().year}')
+          .document('count')
+          .setData({'dayOff': 0});
     });
     if (mounted) {
       _sendEmail(enrol);
@@ -158,24 +195,45 @@ class AddStafState extends State<AddStaf> {
     } else {
       type = 2;
     }
-    await firestore
-      .collection('user')
-      .document(outlet)
-      .collection('listuser')
-      .document(widget.id)
-      .updateData({
-      'outlet': _outlet,
-      'position': _position,
-      'name': nameController.text,
-      'phone': dialcode + phoneController.text,
-      'address': addressController.text,
-      'type': type,
-      //'img': urlImg
-    });
-    if (mounted) {
-      Navigator.pop(context);
-      showCenterShortToast();
-      Navigator.pop(context, true);
+    if (_image != null) {
+      await firestore
+          .collection('user')
+          .document(outlet)
+          .collection('listuser')
+          .document(widget.id)
+          .updateData({
+        'outlet': outlet,
+        'position': _position,
+        'name': nameController.text,
+        'phone': dialcode + phoneController.text,
+        'address': addressController.text,
+        'type': type,
+        'img': urlImg
+      });
+      if (mounted) {
+        Navigator.pop(context);
+        showCenterShortToast();
+        Navigator.pop(context, true);
+      }
+    } else {
+      await firestore
+          .collection('user')
+          .document(outlet)
+          .collection('listuser')
+          .document(widget.id)
+          .updateData({
+        'outlet': outlet,
+        'position': _position,
+        'name': nameController.text,
+        'phone': dialcode + phoneController.text,
+        'address': addressController.text,
+        'type': type,
+      });
+      if (mounted) {
+        Navigator.pop(context);
+        showCenterShortToast();
+        Navigator.pop(context, true);
+      }
     }
   }
 
@@ -222,7 +280,10 @@ class AddStafState extends State<AddStaf> {
       setState(() {
         _image = image;
         _compressImage(_image);
+        enableButton();
       });
+    } else {
+      enableButton();
     }
   }
 
@@ -231,7 +292,7 @@ class AddStafState extends State<AddStaf> {
     var name = path.basename(_image.absolute.path);
     var result = await FlutterImageCompress.compressAndGetFile(
       _image.absolute.path,
-      dir.absolute.path + '/$name',
+      dir.absolute.path + '/${DateTime.now()}_$name',
       quality: 60,
     );
     print('before : ' + _image.lengthSync().toString());
@@ -243,7 +304,8 @@ class AddStafState extends State<AddStaf> {
   }
 
   _uploadImageToFirebase() async {
-    StorageReference reference = fs.child('$outlet/staff/' + nameController.text);
+    StorageReference reference =
+        fs.child('$outlet/staff/${nameController.text}_${DateTime.now()}');
 
     try {
       StorageUploadTask uploadTask = reference.putFile(_image);
@@ -261,15 +323,11 @@ class AddStafState extends State<AddStaf> {
 
         setState(() {
           urlImg = url;
-          saveDataStaff();
-        });
-      } else if (uploadTask.isComplete) {
-        final String url = await reference.getDownloadURL();
-        print(url);
-        setState(() {
-          urlImg = url;
-          saveDataStaff();
-          Navigator.pop(context, true);
+          if (widget.action == 20) {
+            updateDataStaff();
+          } else {
+            saveDataStaff();
+          }
         });
       }
     } catch (e) {
@@ -285,9 +343,9 @@ class AddStafState extends State<AddStaf> {
     final message = Message()
       ..from = Address(username, 'Absenin Official')
       ..recipients.add('${emailController.text}')
-      ..subject = "Hay ${nameController.text}. Here's your Absenin Account"
+      ..subject = "Hi! ${nameController.text}. Here's your Absenin Account"
       ..html =
-          "<h1>Welcome to Absenin!</h1><br><center><img src='https://i.ibb.co/9nk62sz/Group-29.png' width='235'></center><br><br><p style='font-size: 18px'><b>This is your Account😊</b></p><p style='font-size: 14px'>Email : <span style='font-size: 20px; font-weight: bold'>${emailController.text}</span></p><p style='font-size: 14px'>Enrol Key : <span style='font-size: 20px; font-weight: bold'>$enrol</span></p><br><br><br><center><button style='background-color: #37474f; color: white; border-radius: 8px; padding: 8px 20px; text-align: center; text-decoration: none; margin: 2px;'>Download App</button><br><p><i>Open Your Apps and Enjoy!</i> \u00a9 2020 Absenin</p></center>";
+          "<h1>Welcome to Absenin!</h1><br><center><img src='https://i.ibb.co/9nk62sz/Group-29.png' width='235'></center><br><br><p style='font-size: 18px'><b>This is your Account😊</b></p><p style='font-size: 14px'>Email : <span style='font-size: 20px; font-weight: bold'>${emailController.text}</span></p><p style='font-size: 14px'>Enrol Key : <span style='font-size: 20px; font-weight: bold'>$enrol</span></p><br><br><br><center><button style='background-color: #37474f; color: white; border-radius: 8px; padding: 8px 20px; text-align: center; text-decoration: none; margin: 2px;'><a href ='$url_downloadApp'>Download App</a></button><br><p><i>Open Your Apps and Enjoy!</i> \u00a9 2020 Absenin</p></center>";
 
     try {
       final sendReport = await send(message, smtpServer);
@@ -381,7 +439,7 @@ class AddStafState extends State<AddStaf> {
                             height: 30,
                           ),
                           Text(
-                            'Choose Outlet',
+                            'Outlet',
                             style: TextStyle(
                               fontSize:
                                   Theme.of(context).textTheme.body1.fontSize,
@@ -409,18 +467,16 @@ class AddStafState extends State<AddStaf> {
                                     ],
                                   ));
                             }).toList(),
-                            onChanged: (value) {
-                              setState(() => _outlet = value);
-                            },
-                            value: _outlet,
+                            onChanged: null,
+                            value: widget.outlet,
                             decoration: InputDecoration(
                               contentPadding: EdgeInsets.fromLTRB(15, 5, 15, 5),
                               border: OutlineInputBorder(),
-                              hintText: 'Outlet',
                               hintStyle: TextStyle(
                                 fontFamily: 'Sans',
                               ),
                             ),
+                            disabledHint: Text(outlet),
                           ),
                           SizedBox(
                             height: 30,
@@ -455,7 +511,10 @@ class AddStafState extends State<AddStaf> {
                                   ));
                             }).toList(),
                             onChanged: (value) {
-                              setState(() => _position = value);
+                              setState(() {
+                                _position = value;
+                                enableButton();
+                              });
                             },
                             value: _position,
                             decoration: InputDecoration(
@@ -500,7 +559,10 @@ class AddStafState extends State<AddStaf> {
                                   ));
                             }).toList(),
                             onChanged: (value) {
-                              setState(() => _typeStaff = value);
+                              setState(() {
+                                _typeStaff = value;
+                                enableButton();
+                              });
                             },
                             value: _typeStaff,
                             decoration: InputDecoration(
@@ -545,27 +607,91 @@ class AddStafState extends State<AddStaf> {
                           ),
                           ClipRRect(
                             borderRadius: BorderRadius.circular(5.0),
-                            child: widget.action == 20
-                                ? GestureDetector(
-                                    onTap: () {
-                                      _getImage();
-                                    },
-                                    child: FadeInImage.assetNetwork(
-                                      placeholder: 'assets/images/absenin.png',
-                                      height: 170.0,
-                                      width: double.infinity,
-                                      image: widget.img,
-                                      fadeInDuration: Duration(seconds: 1),
-                                      fit: BoxFit.cover,
+                            child: widget.action == 20 && _image == null
+                                ? Container(
+                                    width: MediaQuery.of(context).size.width,
+                                    height: 170.0,
+                                    child: Stack(
+                                      children: <Widget>[
+                                        CachedNetworkImage(
+                                          imageUrl: widget.img,
+                                          height: 170.0,
+                                          width: double.infinity,
+                                          fit: BoxFit.cover,
+                                        ),
+                                        // FadeInImage.assetNetwork(
+                                        //   placeholder:
+                                        //       'assets/images/absenin.png',
+                                        //   height: 170.0,
+                                        //   width: double.infinity,
+                                        //   image: widget.img,
+                                        //   fadeInDuration: Duration(seconds: 1),
+                                        //   fit: BoxFit.cover,
+                                        // ),
+                                        Positioned(
+                                            top: 10.0,
+                                            right: 10.0,
+                                            child: ClipOval(
+                                              child: Material(
+                                                color: Colors.black45,
+                                                child: InkWell(
+                                                  onTap: () {
+                                                    _getImage();
+                                                  },
+                                                  child: Padding(
+                                                    padding:
+                                                        const EdgeInsets.all(
+                                                            8.0),
+                                                    child: Icon(
+                                                      Icons.edit,
+                                                      color: Colors.white,
+                                                    ),
+                                                  ),
+                                                ),
+                                              ),
+                                            ))
+                                      ],
                                     ),
                                   )
                                 : _image != null
-                                    ? Image.file(
-                                        _image,
-                                        fit: BoxFit.cover,
-                                        width: double.infinity,
+                                    ? Container(
+                                        width:
+                                            MediaQuery.of(context).size.width,
                                         height: 170.0,
-                                        filterQuality: FilterQuality.medium,
+                                        child: Stack(
+                                          children: <Widget>[
+                                            Image.file(
+                                              _image,
+                                              fit: BoxFit.cover,
+                                              width: double.infinity,
+                                              height: 170.0,
+                                              filterQuality:
+                                                  FilterQuality.medium,
+                                            ),
+                                            Positioned(
+                                                top: 10.0,
+                                                right: 10.0,
+                                                child: ClipOval(
+                                                  child: Material(
+                                                    color: Colors.black45,
+                                                    child: InkWell(
+                                                      onTap: () {
+                                                        _getImage();
+                                                      },
+                                                      child: Padding(
+                                                        padding:
+                                                            const EdgeInsets
+                                                                .all(8.0),
+                                                        child: Icon(
+                                                          Icons.edit,
+                                                          color: Colors.white,
+                                                        ),
+                                                      ),
+                                                    ),
+                                                  ),
+                                                ))
+                                          ],
+                                        ),
                                       )
                                     : Container(
                                         height: 170.0,
@@ -573,7 +699,7 @@ class AddStafState extends State<AddStaf> {
                                         child: Center(
                                           child: IconButton(
                                             icon: Icon(FontAwesome.picture_o),
-                                            onPressed: (){
+                                            onPressed: () {
                                               _getImage();
                                             },
                                           ),
@@ -604,7 +730,9 @@ class AddStafState extends State<AddStaf> {
                                 ),
                                 TextFormField(
                                   controller: nameController,
-                                  validator: validateName,
+                                  onChanged: (value) {
+                                    enableButton();
+                                  },
                                   onSaved: (value) {
                                     name = value;
                                   },
@@ -641,7 +769,9 @@ class AddStafState extends State<AddStaf> {
                                 ),
                                 TextFormField(
                                   controller: emailController,
-                                  validator: validateEmail,
+                                  onChanged: (value) {
+                                    enableButton();
+                                  },
                                   readOnly: widget.action == 20 ? true : false,
                                   onSaved: (value) {
                                     email = value;
@@ -677,26 +807,25 @@ class AddStafState extends State<AddStaf> {
                                 ),
                                 TextFormField(
                                   controller: phoneController,
-                                  validator: validatePhone,
+                                  onChanged: (value) {
+                                    enableButton();
+                                  },
                                   onSaved: (value) {
                                     phone = value;
                                   },
                                   decoration: InputDecoration(
-                                    prefixIcon: CountryListPick(
-                                      isShowFlag: false,
-                                      isShowTitle: false,
-                                      isDownIcon: true,
-                                      initialSelection: dialcode,
-                                      onChanged: (CountryCode code) {
-                                        print(code.name);
-                                        print(code.code);
-                                        print(code.dialCode);
-                                        print(code.flagUri);
-                                        setState(() {
-                                          dialcode = code.dialCode;
-                                        });
-                                      },
-                                    ),
+                                    // prefixIcon: CountryListPick(
+                                    //   initialSelection: dialcode,
+                                    //   onChanged: (CountryCode code) {
+                                    //     print(code.name);
+                                    //     print(code.code);
+                                    //     print(code.dialCode);
+                                    //     print(code.flagUri);
+                                    //     setState(() {
+                                    //       dialcode = code.dialCode;
+                                    //     });
+                                    //   },
+                                    // ),
                                     hintText: '878xxx',
                                     border: OutlineInputBorder(),
                                   ),
@@ -727,12 +856,14 @@ class AddStafState extends State<AddStaf> {
                                 ),
                                 TextFormField(
                                   controller: addressController,
-                                  validator: validateAddress,
+                                  onChanged: (value) {
+                                    enableButton();
+                                  },
                                   onSaved: (value) {
                                     address = value;
                                   },
                                   decoration: InputDecoration(
-                                    hintText: 'Gedongan',
+                                    hintText: 'Yogyakarta',
                                     border: OutlineInputBorder(),
                                   ),
                                   keyboardType: TextInputType.text,
@@ -773,36 +904,51 @@ class AddStafState extends State<AddStaf> {
                       width: double.infinity,
                       height: 50.0,
                       child: FlatButton(
-                        onPressed: () {
-                          FocusScope.of(context).requestFocus(new FocusNode());
-                          final formVal = formKey.currentState;
-                          if (formVal.validate()) {
-                            setState(() {
-                              if (widget.action == 20) {
-                                _prosesDialog();
-                                updateDataStaff();
-                              } else {
-                                if(_outlet != null && _position != null && _typeStaff != null && _image != null){
-                                  _prosesDialog();
-                                  _uploadImageToFirebase();
+                        onPressed: _buttonActive
+                            ? () {
+                                FocusScope.of(context)
+                                    .requestFocus(new FocusNode());
+                                final formVal = formKey.currentState;
+                                if (formVal.validate()) {
+                                  setState(() {
+                                    if (widget.action == 20) {
+                                      if (_typeStaff != null) {
+                                        _prosesDialog();
+                                        if (_image != null) {
+                                          _uploadImageToFirebase();
+                                        } else {
+                                          updateDataStaff();
+                                        }
+                                      }
+                                    } else {
+                                      if (outlet != null &&
+                                          _position != null &&
+                                          _typeStaff != null &&
+                                          _image != null) {
+                                        _prosesDialog();
+                                        _uploadImageToFirebase();
+                                      }
+                                    }
+                                    autoVal = true;
+                                  });
+                                  formVal.save();
+                                } else {
+                                  autoVal = true;
                                 }
                               }
-                              autoVal = true;
-                            });
-                            formVal.save();
-                          } else {
-                            autoVal = true;
-                          }
-                        },
+                            : () {},
                         child: Text(
                           widget.action == 20 ? 'Update' : 'Save',
                           style: TextStyle(
-                              color: Colors.white,
                               fontFamily: 'Google',
                               fontWeight: FontWeight.bold),
                         ),
-                        color: Theme.of(context).buttonColor,
-                        textColor: Colors.white,
+                        color: _buttonActive
+                            ? Theme.of(context).buttonColor
+                            : Theme.of(context).disabledColor.withOpacity(0.1),
+                        textColor: _buttonActive
+                            ? Colors.white
+                            : Theme.of(context).disabledColor,
                         shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(5.0)),
                       ),

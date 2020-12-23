@@ -1,4 +1,5 @@
 import 'package:absenin/supervisor/liststaff.dart' as staffpage;
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_icons/flutter_icons.dart';
@@ -11,11 +12,30 @@ import 'package:some_calendar/some_calendar.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 
 class AddSchedule extends StatefulWidget {
-
   final String title;
-  final DateTime month;
+  final DateTime month,
+      startfull,
+      endfull,
+      startpart,
+      endpart,
+      startfull2,
+      endfull2,
+      startpart2,
+      endpart2;
 
-  const AddSchedule({Key key, @required this.title, @required this.month}) : super(key: key);
+  const AddSchedule(
+      {Key key,
+      @required this.title,
+      @required this.month,
+      @required this.startfull,
+      @required this.endfull,
+      @required this.startpart,
+      @required this.endpart,
+      @required this.startfull2,
+      @required this.endfull2,
+      @required this.startpart2,
+      @required this.endpart2})
+      : super(key: key);
 
   @override
   State<StatefulWidget> createState() {
@@ -32,9 +52,10 @@ class StaffItem {
   DateTime libur;
   List<DateTime> overtime;
   bool check;
+  bool otherTime;
 
-  StaffItem(this.id, this.img, this.name, this.part, this.type, this.libur, this.overtime,
-      this.check);
+  StaffItem(this.id, this.img, this.name, this.part, this.type, this.libur,
+      this.overtime, this.check, this.otherTime);
 }
 
 class DateItem {
@@ -86,13 +107,16 @@ class AddScheduleState extends State<AddSchedule> {
   int staffCountSelected = 0;
   int fullTimeCount = 0;
   int partTimeCount = 0;
-  bool _canVibrate = true;
+  bool _canVibrate = true, _otherTime = false;
   DateFormat dateTimeFormat = DateFormat.yMMMMEEEEd();
   DateFormat year = DateFormat.y();
   DateFormat month = DateFormat.M();
   DateFormat day = DateFormat.d();
+  DateFormat times = DateFormat.Hm();
   int lastDayNum;
   String outlet;
+
+  DateFormat hour = DateFormat.Hm();
 
   PartItem part1 = new PartItem('Inventori', false);
   PartItem part2 = new PartItem('Front Linner', false);
@@ -104,7 +128,8 @@ class AddScheduleState extends State<AddSchedule> {
   @override
   void initState() {
     super.initState();
-    DateTime lastDay = new DateTime(widget.month.year, widget.month.month+1, 0);
+    DateTime lastDay =
+        new DateTime(widget.month.year, widget.month.month + 1, 0);
     lastDayNum = lastDay.day;
     selectedDates.add(selectedDate);
     listPart.add(part1);
@@ -142,28 +167,53 @@ class AddScheduleState extends State<AddSchedule> {
         'fullend': listDateTime[i].endFull,
         'partstart': listDateTime[i].startPart,
         'partend': listDateTime[i].endPart,
+        'fullstart2': DateTime(
+            listDateTime[i].startFull.year,
+            listDateTime[i].startFull.month,
+            listDateTime[i].startFull.day,
+            widget.startfull2.hour,
+            widget.startfull2.minute),
+        'fullend2': DateTime(
+            listDateTime[i].endFull.year,
+            listDateTime[i].endFull.month,
+            listDateTime[i].endFull.day,
+            widget.endfull2.hour,
+            widget.endfull2.minute),
+        'partstart2': DateTime(
+            listDateTime[i].startPart.year,
+            listDateTime[i].startPart.month,
+            listDateTime[i].startPart.day,
+            widget.startpart2.hour,
+            widget.startpart2.minute),
+        'partend2': DateTime(
+            listDateTime[i].endPart.year,
+            listDateTime[i].endPart.month,
+            listDateTime[i].endPart.day,
+            widget.endpart2.hour,
+            widget.endpart2.minute),
       });
 
       for (int j = 0; j < listStaff.length; j++) {
         if (listStaff[j].libur != listDateTime[i].date) {
           bool overtime = false;
-          if(listStaff[j].overtime != null){
+          if (listStaff[j].overtime != null) {
             overtime = listStaff[j].overtime.contains(listDateTime[i].date);
           }
           await firestore
-            .collection('schedule')
-            .document(outlet)
-            .collection('scheduledetail')
-            .document(tahun)
-            .collection(bulan)
-            .document(widget.title)
-            .collection('listday')
-            .document(tanggal)
-            .collection('liststaff')
-            .document(listStaff[j].id)
-            .setData({
+              .collection('schedule')
+              .document(outlet)
+              .collection('scheduledetail')
+              .document(tahun)
+              .collection(bulan)
+              .document(widget.title)
+              .collection('listday')
+              .document(tanggal)
+              .collection('liststaff')
+              .document(listStaff[j].id)
+              .setData({
             'pos': listStaff[j].part,
             'type': listStaff[j].type,
+            'otherTime': listStaff[j].otherTime,
             'clockin': listDateTime[i].startPart,
             'clockout': listDateTime[i].startPart,
             'break': listDateTime[i].startPart,
@@ -257,6 +307,8 @@ class AddScheduleState extends State<AddSchedule> {
                     onPressed: () {
                       if (selectedDates.length > 0) {
                         listDateTime.clear();
+                        listDateDayOff.clear();
+                        listDateOvertime.clear();
                         for (int i = 0; i < selectedDates.length; i++) {
                           DateTimes date = new DateTimes(
                               false,
@@ -265,29 +317,30 @@ class AddScheduleState extends State<AddSchedule> {
                                   selectedDates[i].year,
                                   selectedDates[i].month,
                                   selectedDates[i].day,
-                                  8,
-                                  0),
+                                  widget.startfull.hour,
+                                  widget.startfull.minute),
                               DateTime(
                                   selectedDates[i].year,
                                   selectedDates[i].month,
                                   selectedDates[i].day,
-                                  16,
-                                  0),
+                                  widget.endfull.hour,
+                                  widget.endfull.minute),
                               DateTime(
                                   selectedDates[i].year,
                                   selectedDates[i].month,
                                   selectedDates[i].day,
-                                  9,
-                                  30),
+                                  widget.startpart.hour,
+                                  widget.startpart.minute),
                               DateTime(
                                   selectedDates[i].year,
                                   selectedDates[i].month,
                                   selectedDates[i].day,
-                                  15,
-                                  30),
+                                  widget.endpart.hour,
+                                  widget.endpart.minute),
                               false);
                           DateItem item = new DateItem(false, selectedDates[i]);
-                          DateItem2 item2 = new DateItem2(false, selectedDates[i]);
+                          DateItem2 item2 =
+                              new DateItem2(false, selectedDates[i]);
                           setState(() {
                             listDateTime.add(date);
                             listDateDayOff.add(item);
@@ -646,7 +699,7 @@ class AddScheduleState extends State<AddSchedule> {
             )));
   }
 
-  _showSinglePostDialog(String title, int position) async {
+  _showSinglePostDialog(String title, int position, String otherTime) async {
     final bool result = await showDialog(
         context: context,
         builder: (context) {
@@ -763,8 +816,8 @@ class AddScheduleState extends State<AddSchedule> {
                                           });
                                         },
                                         child: Text(
-                                          dateFormat
-                                              .format(listDateDayOff[index].date),
+                                          dateFormat.format(
+                                              listDateDayOff[index].date),
                                           style: TextStyle(
                                               fontFamily: 'Google',
                                               fontWeight: FontWeight.bold,
@@ -804,25 +857,25 @@ class AddScheduleState extends State<AddSchedule> {
                               ),
                             ],
                           ),
-                          Divider(
-                      height: 0.0,
-                    ),
-                          Padding(
-                            padding: const EdgeInsets.only(
-                                left: 15.0, right: 15.0, top: 10.0, bottom: 8.0),
-                            child: Text(
-                              'Overtime Day',
-                              style: TextStyle(
-                                  fontFamily: 'Google',
-                                  fontWeight: FontWeight.bold,
-                                  color:
-                                      MediaQuery.of(context).platformBrightness ==
-                                              Brightness.light
-                                          ? Colors.black54
-                                          : Colors.grey[400]),
-                            ),
+                        Divider(
+                          height: 0.0,
+                        ),
+                        Padding(
+                          padding: const EdgeInsets.only(
+                              left: 15.0, right: 15.0, top: 10.0, bottom: 8.0),
+                          child: Text(
+                            'Overtime Day',
+                            style: TextStyle(
+                                fontFamily: 'Google',
+                                fontWeight: FontWeight.bold,
+                                color:
+                                    MediaQuery.of(context).platformBrightness ==
+                                            Brightness.light
+                                        ? Colors.black54
+                                        : Colors.grey[400]),
                           ),
-                          if(listDateOvertime.length > 0)
+                        ),
+                        if (listDateOvertime.length > 0)
                           Container(
                             height: 48.0,
                             margin: EdgeInsets.only(top: 5.0, bottom: 15.0),
@@ -888,8 +941,8 @@ class AddScheduleState extends State<AddSchedule> {
                                           });
                                         },
                                         child: Text(
-                                          dateFormat
-                                              .format(listDateOvertime[index].date),
+                                          dateFormat.format(
+                                              listDateOvertime[index].date),
                                           style: TextStyle(
                                               fontFamily: 'Google',
                                               fontWeight: FontWeight.bold,
@@ -899,10 +952,9 @@ class AddScheduleState extends State<AddSchedule> {
                                                   .fontSize),
                                         )),
                                   );
-                                }
-                              ),
+                                }),
                           )
-                          else 
+                        else
                           Column(
                             children: <Widget>[
                               SizedBox(
@@ -930,9 +982,50 @@ class AddScheduleState extends State<AddSchedule> {
                               ),
                             ],
                           ),
-                          Divider(
-                      height: 0.0,
-                    ),
+                        Divider(
+                          height: 0.0,
+                        ),
+                        Padding(
+                          padding: const EdgeInsets.only(
+                              left: 15.0, right: 15.0, top: 10.0, bottom: 5.0),
+                          child: Text(
+                            'Set another time',
+                            style: TextStyle(
+                                fontFamily: 'Google',
+                                fontWeight: FontWeight.bold,
+                                color:
+                                    MediaQuery.of(context).platformBrightness ==
+                                            Brightness.light
+                                        ? Colors.black54
+                                        : Colors.grey[400]),
+                          ),
+                        ),
+                        Padding(
+                          padding: EdgeInsets.only(bottom: 10.0),
+                          child: ListTile(
+                            onTap: () {
+                              setState(() {
+                                _otherTime = !_otherTime;
+                              });
+                            },
+                            title: Text(
+                              otherTime,
+                              style: TextStyle(
+                                fontFamily: 'Google',
+                              ),
+                            ),
+                            trailing: Switch(
+                                value: _otherTime,
+                                onChanged: (value) {
+                                  setState(() {
+                                    _otherTime = value;
+                                  });
+                                }),
+                          ),
+                        ),
+                        Divider(
+                          height: 0.0,
+                        ),
                         Padding(
                           padding: const EdgeInsets.only(
                               left: 15.0, right: 15.0, top: 10.0, bottom: 15.0),
@@ -1045,6 +1138,9 @@ class AddScheduleState extends State<AddSchedule> {
             });
           }
         }
+        setState(() {
+          listStaff[position].otherTime = _otherTime;
+        });
       }
     }
   }
@@ -1166,8 +1262,8 @@ class AddScheduleState extends State<AddSchedule> {
                                           });
                                         },
                                         child: Text(
-                                          dateFormat
-                                              .format(listDateDayOff[index].date),
+                                          dateFormat.format(
+                                              listDateDayOff[index].date),
                                           style: TextStyle(
                                               fontFamily: 'Google',
                                               fontWeight: FontWeight.bold,
@@ -1207,25 +1303,25 @@ class AddScheduleState extends State<AddSchedule> {
                               ),
                             ],
                           ),
-                          Divider(
-                      height: 0.0,
-                    ),
-                          Padding(
-                            padding: const EdgeInsets.only(
-                                left: 15.0, right: 15.0, top: 10.0, bottom: 8.0),
-                            child: Text(
-                              'Overtime Day',
-                              style: TextStyle(
-                                  fontFamily: 'Google',
-                                  fontWeight: FontWeight.bold,
-                                  color:
-                                      MediaQuery.of(context).platformBrightness ==
-                                              Brightness.light
-                                          ? Colors.black54
-                                          : Colors.grey[400]),
-                            ),
+                        Divider(
+                          height: 0.0,
+                        ),
+                        Padding(
+                          padding: const EdgeInsets.only(
+                              left: 15.0, right: 15.0, top: 10.0, bottom: 8.0),
+                          child: Text(
+                            'Overtime Day',
+                            style: TextStyle(
+                                fontFamily: 'Google',
+                                fontWeight: FontWeight.bold,
+                                color:
+                                    MediaQuery.of(context).platformBrightness ==
+                                            Brightness.light
+                                        ? Colors.black54
+                                        : Colors.grey[400]),
                           ),
-                          if(listDateOvertime.length > 0)
+                        ),
+                        if (listDateOvertime.length > 0)
                           Container(
                             height: 48.0,
                             margin: EdgeInsets.only(top: 5.0, bottom: 15.0),
@@ -1291,8 +1387,8 @@ class AddScheduleState extends State<AddSchedule> {
                                           });
                                         },
                                         child: Text(
-                                          dateFormat
-                                              .format(listDateOvertime[index].date),
+                                          dateFormat.format(
+                                              listDateOvertime[index].date),
                                           style: TextStyle(
                                               fontFamily: 'Google',
                                               fontWeight: FontWeight.bold,
@@ -1302,10 +1398,9 @@ class AddScheduleState extends State<AddSchedule> {
                                                   .fontSize),
                                         )),
                                   );
-                                }
-                              ),
+                                }),
                           )
-                          else 
+                        else
                           Column(
                             children: <Widget>[
                               SizedBox(
@@ -1333,9 +1428,9 @@ class AddScheduleState extends State<AddSchedule> {
                               ),
                             ],
                           ),
-                          Divider(
-                      height: 0.0,
-                    ),
+                        Divider(
+                          height: 0.0,
+                        ),
                         Padding(
                           padding: const EdgeInsets.only(
                               left: 15.0, right: 15.0, top: 10.0, bottom: 15.0),
@@ -1452,7 +1547,7 @@ class AddScheduleState extends State<AddSchedule> {
               if (selectedLibur != null) {
                 listStaff[j].libur = selectedLibur;
               }
-              if(selectedOver != null){
+              if (selectedOver != null) {
                 listStaff[j].overtime = selectedOver;
               }
               listStaff[j].check = false;
@@ -1478,7 +1573,7 @@ class AddScheduleState extends State<AddSchedule> {
         int partTime = 0;
         for (int i = 0; i < listTemp.length; i++) {
           StaffItem item = new StaffItem(listTemp[i].id, listTemp[i].img,
-              listTemp[i].name, '', listTemp[i].type, null, null, false);
+              listTemp[i].name, '', listTemp[i].type, null, null, false, false);
           if (listTemp[i].type == 1) {
             fullTime++;
           } else {
@@ -1542,61 +1637,64 @@ class AddScheduleState extends State<AddSchedule> {
                 ? '$dateCountSelected'
                 : staffSelected ? '$staffCountSelected' : widget.title),
             actions: <Widget>[
-              if(!dateSelected && !staffSelected)
-              FlatButton(
-                child: Text(
-                  'Save',
-                  style: TextStyle(
-                      color: Theme.of(context).accentColor,
-                      fontFamily: 'Google',
-                      fontWeight: FontWeight.bold),
-                  textAlign: TextAlign.right,
+              if (!dateSelected &&
+                  !staffSelected &&
+                  listDateTime.length > 0 &&
+                  listStaff.length > 0)
+                FlatButton(
+                  child: Text(
+                    'Save',
+                    style: TextStyle(
+                        color: Theme.of(context).accentColor,
+                        fontFamily: 'Google',
+                        fontWeight: FontWeight.bold),
+                    textAlign: TextAlign.right,
+                  ),
+                  splashColor: Theme.of(context).appBarTheme.color,
+                  highlightColor: Theme.of(context).appBarTheme.color,
+                  onPressed: () {
+                    _prosesDialog();
+                    saveSchedule();
+                  },
                 ),
-                splashColor: Theme.of(context).appBarTheme.color,
-                highlightColor: Theme.of(context).appBarTheme.color,
-                onPressed: () {
-                  _prosesDialog();
-                  saveSchedule();
-                },
-              ),
               if (dateSelected)
                 IconButton(
-                  icon: Icon(
-                    MaterialIcons.delete,
-                    size: 20.0,
-                  ),
-                  onPressed: () {
-                    List<DateTimes> date = List<DateTimes>();
-                    List<DateItem> dayOff = List<DateItem>();
-                    List<DateItem2> overtime = List<DateItem2>();
-                    for(int i = 0; i < listDateTime.length; i++){
-                      if(!listDateTime[i].check){
-                        date.add(listDateTime[i]);
-                      }
-                    }
-                    for(int j = 0; j < listDateDayOff.length; j++){
-                      for(int k = 0; k < date.length; k++){
-                        if(listDateDayOff[j].date.day == date[k].date.day){
-                          dayOff.add(listDateDayOff[j]);
+                    icon: Icon(
+                      MaterialIcons.delete,
+                      size: 20.0,
+                    ),
+                    onPressed: () {
+                      List<DateTimes> date = List<DateTimes>();
+                      List<DateItem> dayOff = List<DateItem>();
+                      List<DateItem2> overtime = List<DateItem2>();
+                      for (int i = 0; i < listDateTime.length; i++) {
+                        if (!listDateTime[i].check) {
+                          date.add(listDateTime[i]);
                         }
                       }
-                    }
-                    for(int j = 0; j < listDateOvertime.length; j++){
-                      for(int k = 0; k < date.length; k++){
-                        if(listDateOvertime[j].date.day == date[k].date.day){
-                          overtime.add(listDateOvertime[j]);
+                      for (int j = 0; j < listDateDayOff.length; j++) {
+                        for (int k = 0; k < date.length; k++) {
+                          if (listDateDayOff[j].date.day == date[k].date.day) {
+                            dayOff.add(listDateDayOff[j]);
+                          }
                         }
                       }
-                    }
-                    setState(() {
-                      listDateTime = date;
-                      listDateDayOff = dayOff;
-                      listDateOvertime = overtime;
-                      dateSelected = !dateSelected;
-                      dateCountSelected = 0;
-                    });
-                  }
-                ),
+                      for (int j = 0; j < listDateOvertime.length; j++) {
+                        for (int k = 0; k < date.length; k++) {
+                          if (listDateOvertime[j].date.day ==
+                              date[k].date.day) {
+                            overtime.add(listDateOvertime[j]);
+                          }
+                        }
+                      }
+                      setState(() {
+                        listDateTime = date;
+                        listDateDayOff = dayOff;
+                        listDateOvertime = overtime;
+                        dateSelected = !dateSelected;
+                        dateCountSelected = 0;
+                      });
+                    }),
               if (staffSelected)
                 Row(
                   children: <Widget>[
@@ -1630,15 +1728,16 @@ class AddScheduleState extends State<AddSchedule> {
                         ),
                         onPressed: () {
                           List<StaffItem> staff = List<StaffItem>();
-                          List<staffpage.StaffItem> temp = List<staffpage.StaffItem>();
+                          List<staffpage.StaffItem> temp =
+                              List<staffpage.StaffItem>();
                           for (int i = 0; i < listStaff.length; i++) {
-                            if(!listStaff[i].check){
+                            if (!listStaff[i].check) {
                               staff.add(listStaff[i]);
                             }
                           }
                           for (int j = 0; j < listTemp.length; j++) {
-                            for(int k = 0; k < staff.length; k++){
-                              if(listTemp[j].id == staff[k].id){
+                            for (int k = 0; k < staff.length; k++) {
+                              if (listTemp[j].id == staff[k].id) {
                                 temp.add(listTemp[j]);
                               }
                             }
@@ -1649,8 +1748,7 @@ class AddScheduleState extends State<AddSchedule> {
                             staffSelected = !staffSelected;
                             staffCountSelected = 0;
                           });
-                        }
-                      )
+                        })
                   ],
                 )
             ],
@@ -1731,7 +1829,7 @@ class AddScheduleState extends State<AddSchedule> {
                                           ),
                                         ),
                                         Text(
-                                          '07:00 - 16:00 WIB',
+                                          '${hour.format(widget.startfull)} -  ${hour.format(widget.endfull)} WIB',
                                           style: TextStyle(
                                               fontFamily: 'Sans',
                                               fontSize: Theme.of(context)
@@ -1778,7 +1876,7 @@ class AddScheduleState extends State<AddSchedule> {
                                           ),
                                         ),
                                         Text(
-                                          '09:30 - 15.30 WIB',
+                                          '${hour.format(widget.startpart)} -  ${hour.format(widget.endpart)} WIB',
                                           style: TextStyle(
                                               fontFamily: 'Sans',
                                               fontSize: Theme.of(context)
@@ -2227,51 +2325,110 @@ class AddScheduleState extends State<AddSchedule> {
                                                   for (int j = 0;
                                                       j < listDateDayOff.length;
                                                       j++) {
-                                                    if (listDateDayOff[j].date ==
+                                                    if (listDateDayOff[j]
+                                                            .date ==
                                                         listStaff[index]
                                                             .libur) {
                                                       setState(() {
-                                                        listDateDayOff[j].check =
-                                                            true;
+                                                        listDateDayOff[j]
+                                                            .check = true;
                                                       });
                                                     } else {
                                                       setState(() {
-                                                        listDateDayOff[j].check =
-                                                            false;
+                                                        listDateDayOff[j]
+                                                            .check = false;
                                                       });
                                                     }
                                                   }
 
-                                                  if(listStaff[index].overtime != null){
-                                                    List<DateTime> temp = List<DateTime>();
-                                                    for(int k = 0; k < listDateOvertime.length; k++){
-                                                      temp.add(listDateOvertime[k].date);
+                                                  if (listStaff[index]
+                                                          .overtime !=
+                                                      null) {
+                                                    List<DateTime> temp =
+                                                        List<DateTime>();
+                                                    for (int k = 0;
+                                                        k <
+                                                            listDateOvertime
+                                                                .length;
+                                                        k++) {
+                                                      temp.add(
+                                                          listDateOvertime[k]
+                                                              .date);
                                                       setState(() {
-                                                        listDateOvertime[k].check = false;
+                                                        listDateOvertime[k]
+                                                            .check = false;
                                                       });
                                                     }
-                                                    for(int l = 0; l < listStaff[index].overtime.length; l++){
-                                                      if(temp.contains(listStaff[index].overtime[l])){
-                                                        DateItem2 item = new DateItem2(true, listStaff[index].overtime[l]);
+                                                    for (int l = 0;
+                                                        l <
+                                                            listStaff[index]
+                                                                .overtime
+                                                                .length;
+                                                        l++) {
+                                                      if (temp.contains(
+                                                          listStaff[index]
+                                                              .overtime[l])) {
+                                                        DateItem2 item =
+                                                            new DateItem2(
+                                                                true,
+                                                                listStaff[index]
+                                                                    .overtime[l]);
                                                         int position;
-                                                        for(int m = 0; m < listDateOvertime.length; m++){
-                                                          if(listDateOvertime[m].date == listStaff[index].overtime[l]){
+                                                        for (int m = 0;
+                                                            m <
+                                                                listDateOvertime
+                                                                    .length;
+                                                            m++) {
+                                                          if (listDateOvertime[
+                                                                      m]
+                                                                  .date ==
+                                                              listStaff[index]
+                                                                      .overtime[
+                                                                  l]) {
                                                             position = m;
                                                           }
                                                         }
-                                                        listDateOvertime[position] = item;
+                                                        listDateOvertime[
+                                                            position] = item;
                                                       }
                                                     }
                                                   } else {
-                                                    for(int k = 0; k < listDateOvertime.length; k++){
+                                                    for (int k = 0;
+                                                        k <
+                                                            listDateOvertime
+                                                                .length;
+                                                        k++) {
                                                       setState(() {
-                                                        listDateOvertime[k].check = false;
+                                                        listDateOvertime[k]
+                                                            .check = false;
                                                       });
                                                     }
                                                   }
+                                                  String otherTime;
+                                                  if (listStaff[index].type ==
+                                                      1) {
+                                                    otherTime = times.format(
+                                                        widget.startfull2);
+                                                    otherTime += ' - ' +
+                                                        times.format(
+                                                            widget.endfull2);
+                                                  } else {
+                                                    otherTime = times.format(
+                                                        widget.startpart2);
+                                                    otherTime += ' - ' +
+                                                        times.format(
+                                                            widget.endpart2);
+                                                  }
+                                                  if (listStaff[index]
+                                                      .otherTime) {
+                                                    _otherTime = true;
+                                                  } else {
+                                                    _otherTime = false;
+                                                  }
                                                   _showSinglePostDialog(
                                                       listStaff[index].name,
-                                                      index);
+                                                      index,
+                                                      otherTime);
                                                 }
                                               },
                                               onLongPress: () {
@@ -2297,17 +2454,23 @@ class AddScheduleState extends State<AddSchedule> {
                                                 });
                                               },
                                               leading: ClipOval(
-                                                  child:
-                                                      FadeInImage.assetNetwork(
-                                                placeholder:
-                                                    'assets/images/absenin.png',
+                                                  child: CachedNetworkImage(
+                                                imageUrl: listStaff[index].img,
                                                 height: 50.0,
                                                 width: 50.0,
-                                                image: listStaff[index].img,
-                                                fadeInDuration:
-                                                    Duration(seconds: 1),
                                                 fit: BoxFit.cover,
-                                              )),
+                                              )
+                                                  //         FadeInImage.assetNetwork(
+                                                  //   placeholder:
+                                                  //       'assets/images/absenin.png',
+                                                  //   height: 50.0,
+                                                  //   width: 50.0,
+                                                  //   image: listStaff[index].img,
+                                                  //   fadeInDuration:
+                                                  //       Duration(seconds: 1),
+                                                  //   fit: BoxFit.cover,
+                                                  // )
+                                                  ),
                                               title: Text(
                                                 listStaff[index].name,
                                                 style: TextStyle(
@@ -2429,7 +2592,7 @@ class AddScheduleState extends State<AddSchedule> {
             }
             dateCountSelected = 0;
             staffCountSelected = 0;
-          } else {
+          } else if (listDateTime.length > 0 && listStaff.length > 0) {
             if (_canVibrate) {
               Vibrate.feedback(FeedbackType.warning);
             }
@@ -2492,7 +2655,8 @@ class AddScheduleState extends State<AddSchedule> {
                               child: FlatButton(
                                 onPressed: () {
                                   Navigator.pop(context);
-                                  Navigator.pop(context, true);
+                                  _prosesDialog();
+                                  saveSchedule();
                                 },
                                 child: Text(
                                   'Save',
@@ -2531,6 +2695,8 @@ class AddScheduleState extends State<AddSchedule> {
                         ),
                       ],
                     )));
+          } else {
+            exit = true;
           }
           return exit;
         });

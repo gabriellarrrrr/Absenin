@@ -9,10 +9,18 @@ import 'package:flutter_vibrate/flutter_vibrate.dart';
 import 'package:fluttertoast/fluttertoast.dart';
 import 'package:pin_code_fields/pin_code_fields.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 
 class PasscodeSpv extends StatefulWidget {
-  final String email, outlet;
-  const PasscodeSpv({Key key, @required this.email, @required this.outlet}) : super(key: key);
+  final String id, email, outlet;
+  final bool status;
+  const PasscodeSpv(
+      {Key key,
+      this.id,
+      @required this.email,
+      @required this.outlet,
+      @required this.status})
+      : super(key: key);
   @override
   State<StatefulWidget> createState() {
     return PasscodeSpvState();
@@ -26,6 +34,8 @@ class PasscodeSpvState extends State<PasscodeSpv> {
   String message = '';
   bool _canVibrate = true;
   bool _load = false;
+  bool _reenter = false;
+  final Firestore fs = Firestore.instance;
   final FirebaseAuth auth = FirebaseAuth.instance;
 
   @override
@@ -74,6 +84,38 @@ class PasscodeSpvState extends State<PasscodeSpv> {
     }
   }
 
+  void registerAuth() async {
+    SharedPreferences prefs = await SharedPreferences.getInstance();
+    try {
+      FirebaseUser user = (await auth.createUserWithEmailAndPassword(
+              email: widget.email, password: passcode))
+          .user;
+
+      assert(user != null);
+      assert(await user.getIdToken() != null);
+
+      final FirebaseUser currentUser = await auth.currentUser();
+      if (user.uid == currentUser.uid) {
+        await fs
+            .collection('user')
+            .document(widget.outlet)
+            .collection('listuser')
+            .document(widget.id)
+            .updateData({
+          'passcode': passcode,
+          'status': true,
+        });
+        if (mounted) {
+          prefs.setString('outletUser', widget.outlet);
+          Navigator.of(context).pushAndRemoveUntil(
+              _createRoute(SpvHome()), (Route<dynamic> route) => false);
+        }
+      }
+    } catch (e) {
+      print('Error Login: $e');
+    }
+  }
+
   _checkVibrate() async {
     bool canVibrate = await Vibrate.canVibrate;
     setState(() {
@@ -100,7 +142,7 @@ class PasscodeSpvState extends State<PasscodeSpv> {
   @override
   Widget build(BuildContext context) {
     return GestureDetector(
-      onTap: (){
+      onTap: () {
         FocusScope.of(context).requestFocus(new FocusNode());
       },
       child: Scaffold(
@@ -145,7 +187,11 @@ class PasscodeSpvState extends State<PasscodeSpv> {
                     height: 20,
                   ),
                   Text(
-                    'Enter Passcode',
+                    widget.status
+                        ? 'Enter Passcode'
+                        : _reenter
+                            ? 'Re-enter Your Passcode'
+                            : 'Create New Passcode',
                     style: TextStyle(
                         fontSize: Theme.of(context).textTheme.headline.fontSize,
                         fontWeight: FontWeight.bold,
@@ -176,7 +222,8 @@ class PasscodeSpvState extends State<PasscodeSpv> {
                     height: 30,
                   ),
                   Padding(
-                    padding: EdgeInsets.symmetric(vertical: 8.0, horizontal: 30),
+                    padding:
+                        EdgeInsets.symmetric(vertical: 8.0, horizontal: 30),
                     child: PinCodeTextField(
                       length: 6,
                       obsecureText: false,
@@ -203,17 +250,43 @@ class PasscodeSpvState extends State<PasscodeSpv> {
                           fontFamily: 'Google',
                           fontWeight: FontWeight.bold),
                       onCompleted: (value) {
-                        setState(() {
-                          passcode = value;
-                          _load = true;
-                          signIn(widget.email, passcode);
-                        });
+                        if (widget.status) {
+                          setState(() {
+                            passcode = value;
+                            _load = true;
+                            signIn(widget.email, passcode);
+                          });
+                        } else {
+                          if (!_reenter) {
+                            textEditingController.text = '';
+                            errorController.add(ErrorAnimationType.shake);
+                            setState(() {
+                              passcode = value;
+                              _reenter = true;
+                            });
+                          } else {
+                            if (value == passcode) {
+                              setState(() {
+                                passcode = value;
+                                _load = true;
+                                registerAuth();
+                              });
+                            } else {
+                              textEditingController.text = '';
+                              errorController.add(ErrorAnimationType.shake);
+                              setState(() {
+                                message = "Passcode don't match!";
+                              });
+                              showCenterShortToast();
+                              if (_canVibrate) {
+                                Vibrate.feedback(FeedbackType.error);
+                              }
+                            }
+                          }
+                        }
                       },
                       onChanged: (value) {
                         print(value);
-                        // setState(() {
-                        //   passcode = value;
-                        // });
                       },
                     ),
                   ),
@@ -251,6 +324,28 @@ class PasscodeSpvState extends State<PasscodeSpv> {
                           ),
                         ],
                       ),
+                    ),
+                  if (_reenter && !_load)
+                    FlatButton(
+                      onPressed: () {
+                        setState(() {
+                          passcode = '';
+                          _reenter = false;
+                          textEditingController.text = '';
+                        });
+                      },
+                      child: Text(
+                        'Reset Passcode',
+                        style: TextStyle(
+                            color: Colors.white,
+                            fontFamily: 'Google',
+                            fontWeight: FontWeight.bold),
+                      ),
+                      color: Theme.of(context).buttonColor,
+                      shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(50.0)),
+                      splashColor: Colors.black26,
+                      highlightColor: Colors.black26,
                     ),
                 ],
               ),

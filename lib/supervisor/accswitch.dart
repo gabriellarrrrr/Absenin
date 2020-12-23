@@ -1,4 +1,5 @@
 import 'package:absenin/anim/FadeUp.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:intl/intl.dart';
@@ -25,31 +26,29 @@ class SwitchItem {
       photoFrom,
       photoTo;
   int status, typeFrom, typeTo;
-  bool acc, reject;
+  bool acc, reject, toDayOff;
 
   SwitchItem(
-    this.id,
-    this.dateFrom, 
-    this.dateTo,  
-    this.idFrom, 
-    this.idTo, 
-    this.shiftFrom, 
-    this.shiftTo, 
-    this.nameFrom, 
-    this.nameTo, 
-    this.posFrom, 
-    this.posTo, 
-    this.photoFrom, 
-    this.photoTo,
-    this.typeFrom,
-    this.typeTo,
-    this.status,
-    this.checked,
-    this.acc,
-    this.reject
-  );
-
-  
+      this.id,
+      this.dateFrom,
+      this.dateTo,
+      this.idFrom,
+      this.idTo,
+      this.shiftFrom,
+      this.shiftTo,
+      this.nameFrom,
+      this.nameTo,
+      this.posFrom,
+      this.posTo,
+      this.photoFrom,
+      this.photoTo,
+      this.typeFrom,
+      this.typeTo,
+      this.status,
+      this.checked,
+      this.acc,
+      this.reject,
+      this.toDayOff);
 }
 
 class AccSwitchState extends State<AccSwitch>
@@ -181,10 +180,7 @@ class AccSwitchState extends State<AccSwitch>
           .document(outlet)
           .collection('listswitch')
           .document(id)
-          .updateData({
-            'status': value, 
-            'checked': DateTime.now()
-          });
+          .updateData({'status': value, 'checked': DateTime.now()});
       if (mounted) {
         checkSchedule(
             listSwitch[index].idFrom,
@@ -197,7 +193,8 @@ class AccSwitchState extends State<AccSwitch>
             listSwitch[index].typeTo,
             listSwitch[index].posFrom,
             listSwitch[index].posTo,
-            value);
+            value,
+            listSwitch[index].toDayOff,);
         listSwitch.clear();
         getListSwitch();
       }
@@ -206,25 +203,55 @@ class AccSwitchState extends State<AccSwitch>
     }
   }
 
-  void checkSchedule(String idFrom, String idTo, DateTime dateFrom, DateTime dateTo, 
-      String shiftFrom, String shiftTo, int typeFrom, int typeTo, String posFrom, String posTo, int value,) async {
-    await db
-      .collection('schedule')
-      .document(outlet)
-      .collection('scheduledetail')
-      .document('${dateFrom.year}')
-      .collection('${dateFrom.month}')
-      .document(shiftFrom)
-      .collection('listday')
-      .document('${dateFrom.day}')
-      .collection('liststaff')
-      .document(idFrom)
-      .updateData({
-        'switchAcc': value,
-        'switchDate': dateTo
-      });
-    if (mounted) {
-      if (value == 1) {
+  void checkSchedule(
+    String idFrom,
+    String idTo,
+    DateTime dateFrom,
+    DateTime dateTo,
+    String shiftFrom,
+    String shiftTo,
+    int typeFrom,
+    int typeTo,
+    String posFrom,
+    String posTo,
+    int value,
+    bool toDayOff,
+  ) async {
+    if(toDayOff && value == 1){
+      await db
+        .collection('schedule')
+        .document(outlet)
+        .collection('scheduledetail')
+        .document('${dateFrom.year}')
+        .collection('${dateFrom.month}')
+        .document(shiftFrom)
+        .collection('listday')
+        .document('${dateFrom.day}')
+        .collection('liststaff')
+        .document(idTo)
+        .setData({
+          'pos': posFrom,
+          'type': typeTo,
+          'clockin': DateTime.now(),
+          'clockout': DateTime.now(),
+          'break': DateTime.now(),
+          'afterbreak': DateTime.now(),
+          'overtimein': DateTime.now(),
+          'overtimeout': DateTime.now(),
+          'late': 0,
+          'isClockIn': false,
+          'isBreak': false,
+          'isAfterBreak': false,
+          'isClockOut': false,
+          'isOvertime': false,
+          'isOvertimeIn': false,
+          'isOvertimeOut': false,
+          'permit': false,
+          'switch': false,
+          'switchAcc': 0,
+          'switchDate': DateTime.now(),
+          'otherTime': false
+      }).then((value) async {
         await db
           .collection('schedule')
           .document(outlet)
@@ -235,8 +262,35 @@ class AccSwitchState extends State<AccSwitch>
           .collection('listday')
           .document('${dateFrom.day}')
           .collection('liststaff')
-          .document(idTo)
-          .setData({
+          .document(idFrom).delete();
+      });
+    } else {
+      await db
+          .collection('schedule')
+          .document(outlet)
+          .collection('scheduledetail')
+          .document('${dateFrom.year}')
+          .collection('${dateFrom.month}')
+          .document(shiftFrom)
+          .collection('listday')
+          .document('${dateFrom.day}')
+          .collection('liststaff')
+          .document(idFrom)
+          .updateData({'switchAcc': value, 'switchDate': dateTo});
+      if (mounted) {
+        if (value == 1) {
+          await db
+              .collection('schedule')
+              .document(outlet)
+              .collection('scheduledetail')
+              .document('${dateFrom.year}')
+              .collection('${dateFrom.month}')
+              .document(shiftFrom)
+              .collection('listday')
+              .document('${dateFrom.day}')
+              .collection('liststaff')
+              .document(idTo)
+              .setData({
             'pos': posFrom,
             'type': typeTo,
             'clockin': DateTime.now(),
@@ -257,36 +311,34 @@ class AccSwitchState extends State<AccSwitch>
             'switch': false,
             'switchAcc': 0,
             'switchDate': DateTime.now(),
+            'otherTime': false
           });
-        if(mounted){
-          await db
-            .collection('schedule')
-            .document(outlet)
-            .collection('scheduledetail')
-            .document('${dateTo.year}')
-            .collection('${dateTo.month}')
-            .document(shiftTo)
-            .collection('listday')
-            .document('${dateTo.day}')
-            .collection('liststaff')
-            .document(idTo)
-            .updateData({
-              'switch' : true,
-              'switchAcc': value,
-              'switchDate': dateFrom
-            });
-          await db
-            .collection('schedule')
-            .document(outlet)
-            .collection('scheduledetail')
-            .document('${dateTo.year}')
-            .collection('${dateTo.month}')
-            .document(shiftTo)
-            .collection('listday')
-            .document('${dateTo.day}')
-            .collection('liststaff')
-            .document(idFrom)
-            .setData({
+          if (mounted) {
+            await db
+                .collection('schedule')
+                .document(outlet)
+                .collection('scheduledetail')
+                .document('${dateTo.year}')
+                .collection('${dateTo.month}')
+                .document(shiftTo)
+                .collection('listday')
+                .document('${dateTo.day}')
+                .collection('liststaff')
+                .document(idTo)
+                .updateData(
+                    {'switch': true, 'switchAcc': value, 'switchDate': dateFrom});
+            await db
+                .collection('schedule')
+                .document(outlet)
+                .collection('scheduledetail')
+                .document('${dateTo.year}')
+                .collection('${dateTo.month}')
+                .document(shiftTo)
+                .collection('listday')
+                .document('${dateTo.day}')
+                .collection('liststaff')
+                .document(idFrom)
+                .setData({
               'pos': posTo,
               'type': typeFrom,
               'clockin': DateTime.now(),
@@ -307,7 +359,9 @@ class AccSwitchState extends State<AccSwitch>
               'switch': false,
               'switchAcc': 0,
               'switchDate': DateTime.now(),
+              'otherTime': false
             });
+          }
         }
       }
     }
@@ -326,7 +380,7 @@ class AccSwitchState extends State<AccSwitch>
         });
       } else {
         snapshot.documents.forEach((f) async {
-          if(f.data['toAcc']){
+          if (f.data['toAcc']) {
             Timestamp dateFrom = f.data['datefrom'];
             Timestamp dateTo = f.data['dateto'];
             Timestamp checked = f.data['checked'];
@@ -361,26 +415,27 @@ class AccSwitchState extends State<AccSwitch>
               });
               if (mounted) {
                 SwitchItem item = new SwitchItem(
-                    f.documentID,
-                    dateFrom.toDate(),
-                    dateTo.toDate(),
-                    f.data['from'],
-                    f.data['to'],
-                    f.data['shiftfrom'],
-                    f.data['shiftto'],
-                    nameFrom,
-                    nameTo,
-                    f.data['posFrom'],
-                    f.data['posTo'],
-                    photoFrom,
-                    photoTo,
-                    typeFrom,
-                    typeTo,
-                    f.data['status'],
-                    checked.toDate(),
-                    false,
-                    false,
-                    );
+                  f.documentID,
+                  dateFrom.toDate(),
+                  dateTo.toDate(),
+                  f.data['from'],
+                  f.data['to'],
+                  f.data['shiftfrom'],
+                  f.data['shiftto'],
+                  nameFrom,
+                  nameTo,
+                  f.data['posFrom'],
+                  f.data['posTo'],
+                  photoFrom,
+                  photoTo,
+                  typeFrom,
+                  typeTo,
+                  f.data['status'],
+                  checked.toDate(),
+                  false,
+                  false,
+                  f.data['toDayOff']
+                );
                 setState(() {
                   listSwitch.add(item);
                   _load = true;
@@ -388,10 +443,10 @@ class AccSwitchState extends State<AccSwitch>
               }
             }
           } else {
-            if(snapshot.documents.length == 1){
+            if (snapshot.documents.length == 1) {
               setState(() {
-              isEmptyy = true;
-            });
+                isEmptyy = true;
+              });
             }
           }
         });
@@ -496,18 +551,25 @@ class AccSwitchState extends State<AccSwitch>
                                           Column(
                                             children: <Widget>[
                                               ClipOval(
-                                                  child:
-                                                      FadeInImage.assetNetwork(
-                                                placeholder:
-                                                    'assets/images/absenin.png',
+                                                  child: CachedNetworkImage(
+                                                imageUrl:
+                                                    listSwitch[index].photoFrom,
                                                 height: 50.0,
                                                 width: 50.0,
-                                                image:
-                                                    listSwitch[index].photoFrom,
-                                                fadeInDuration:
-                                                    Duration(seconds: 1),
                                                 fit: BoxFit.cover,
-                                              )),
+                                              )
+                                                  //         FadeInImage.assetNetwork(
+                                                  //   placeholder:
+                                                  //       'assets/images/absenin.png',
+                                                  //   height: 50.0,
+                                                  //   width: 50.0,
+                                                  //   image:
+                                                  //       listSwitch[index].photoFrom,
+                                                  //   fadeInDuration:
+                                                  //       Duration(seconds: 1),
+                                                  //   fit: BoxFit.cover,
+                                                  // )
+                                                  ),
                                               SizedBox(
                                                 height: 6,
                                               ),
@@ -620,18 +682,25 @@ class AccSwitchState extends State<AccSwitch>
                                           Column(
                                             children: <Widget>[
                                               ClipOval(
-                                                  child:
-                                                      FadeInImage.assetNetwork(
-                                                placeholder:
-                                                    'assets/images/absenin.png',
+                                                  child: CachedNetworkImage(
+                                                imageUrl:
+                                                    listSwitch[index].photoTo,
                                                 height: 50.0,
                                                 width: 50.0,
-                                                image:
-                                                    listSwitch[index].photoTo,
-                                                fadeInDuration:
-                                                    Duration(seconds: 1),
                                                 fit: BoxFit.cover,
-                                              )),
+                                              )
+                                                  //         FadeInImage.assetNetwork(
+                                                  //   placeholder:
+                                                  //       'assets/images/absenin.png',
+                                                  //   height: 50.0,
+                                                  //   width: 50.0,
+                                                  //   image:
+                                                  //       listSwitch[index].photoTo,
+                                                  //   fadeInDuration:
+                                                  //       Duration(seconds: 1),
+                                                  //   fit: BoxFit.cover,
+                                                  // )
+                                                  ),
                                               SizedBox(
                                                 height: 6,
                                               ),

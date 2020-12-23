@@ -1,3 +1,5 @@
+import 'package:absenin/user/photoview.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_icons/flutter_icons.dart';
@@ -32,12 +34,13 @@ class ProfileSpvState extends State<ProfileSpv> {
     getDataUserFromPref();
   }
 
-   _signOutFromAuth() async {
+  _signOutFromAuth() async {
     if (auth.currentUser() != null) {
       await auth.signOut();
       if (mounted) {
         Navigator.pop(context);
-        Navigator.of(context).pushAndRemoveUntil(_createRoute(SignIn()), (Route<dynamic> route) => false);
+        Navigator.of(context).pushAndRemoveUntil(
+            _createRoute(SignIn()), (Route<dynamic> route) => false);
       }
     }
   }
@@ -79,8 +82,26 @@ class ProfileSpvState extends State<ProfileSpv> {
               child: Column(
                 children: <Widget>[
                   GestureDetector(
-                      onTap: () {
-                        //Navigator.push(context, MaterialPageRoute(builder: (context) => PhotoPage()));
+                      onTap: () async {
+                        SharedPreferences prefs =
+                            await SharedPreferences.getInstance();
+                        final result = await Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                                builder: (context) => PhotoPage(
+                                      urlImg: img,
+                                      id: id,
+                                      outlet: outlet,
+                                      nama: name,
+                                    )));
+                        if (result != null) {
+                          if (result != 'null') {
+                            setState(() {
+                              img = result;
+                              prefs.setString('imgUser', result);
+                            });
+                          }
+                        }
                       },
                       child: Hero(
                         tag: 'photo',
@@ -90,14 +111,21 @@ class ProfileSpvState extends State<ProfileSpv> {
                               shape: BoxShape.circle,
                               color: Theme.of(context).dividerColor),
                           child: ClipOval(
-                              child: FadeInImage.assetNetwork(
-                            placeholder: 'assets/images/absenin.png',
+                              child: CachedNetworkImage(
+                            imageUrl: img,
                             height: 100.0,
                             width: 100.0,
-                            image: img,
-                            fadeInDuration: Duration(seconds: 1),
                             fit: BoxFit.cover,
-                          )),
+                          )
+                              //     FadeInImage.assetNetwork(
+                              //   placeholder: 'assets/images/absenin.png',
+                              //   height: 100.0,
+                              //   width: 100.0,
+                              //   image: img,
+                              //   fadeInDuration: Duration(seconds: 1),
+                              //   fit: BoxFit.cover,
+                              // )
+                              ),
                         ),
                       )),
                   SizedBox(
@@ -321,7 +349,7 @@ class ProfileSpvState extends State<ProfileSpv> {
                     color: Theme.of(context).dividerColor,
                   ),
                   ListTile(
-                    onTap: (){
+                    onTap: () {
                       _signOutFromAuth();
                     },
                     contentPadding: EdgeInsets.zero,
@@ -366,7 +394,7 @@ class ProfileSpvState extends State<ProfileSpv> {
     );
   }
 
-Route _createRoute(Widget destination) {
+  Route _createRoute(Widget destination) {
     return PageRouteBuilder(
       transitionDuration: Duration(milliseconds: 200),
       pageBuilder: (context, animation, secondaryAnimation) => destination,
@@ -385,5 +413,4 @@ Route _createRoute(Widget destination) {
       },
     );
   }
-
 }

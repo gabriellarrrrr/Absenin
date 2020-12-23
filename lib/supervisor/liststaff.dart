@@ -1,6 +1,8 @@
 import 'package:absenin/supervisor/addstaf.dart';
 import 'package:absenin/supervisor/detailstaff.dart';
+import 'package:absenin/supervisor/historystaff.dart';
 import 'package:absenin/transition/revealroute.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:content_placeholder/content_placeholder.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
@@ -36,19 +38,18 @@ class StaffItem {
   String enrol;
 
   StaffItem(
-    this.id,
-    this.img,
-    this.name,
-    this.position,
-    this.type,
-    this.check,
-    this.phone,
-    this.address,
-    this.email,
-    this.outlet,
-    this.enrol,
-    this.signin
-  );
+      this.id,
+      this.img,
+      this.name,
+      this.position,
+      this.type,
+      this.check,
+      this.phone,
+      this.address,
+      this.email,
+      this.outlet,
+      this.enrol,
+      this.signin);
 }
 
 class StaffState extends State<Staff> {
@@ -81,12 +82,11 @@ class StaffState extends State<Staff> {
   }
 
   void getStaff() async {
-      db
+    db
         .collection('user')
         .document(outlet)
         .collection('listuser')
-        .where('role', isEqualTo: 1)
-        .where('delete', isEqualTo: false)
+        .orderBy('name')
         .snapshots()
         .listen((snapshot) {
       if (snapshot.documents.isEmpty) {
@@ -95,23 +95,95 @@ class StaffState extends State<Staff> {
         });
       } else {
         listStaff.clear();
-        snapshot.documents.forEach((f) {
-          StaffItem item = new StaffItem(
-              f.documentID,
-              f.data['img'],
-              f.data['name'],
-              f.data['position'],
-              f.data['type'],
-              false,
-              f.data['phone'],
-              f.data['address'],
-              f.data['email'],
-              f.data['outlet'],
-              f.data['enrol'],
-              f.data['isSignin']);
-          setState(() {
-            listStaff.add(item);
-          });
+        snapshot.documents.forEach((f) async {
+          if(!f.data['delete']){
+            if (widget.action == 30) {
+              await db
+                  .collection('report')
+                  .document(outlet)
+                  .collection('listreport')
+                  .document('${DateTime.now().year}')
+                  .collection('${DateTime.now().month}')
+                  .document(f.documentID)
+                  .collection('listreport')
+                  .getDocuments()
+                  .then((snapshoot) {
+                if (snapshoot.documents.isNotEmpty) {
+                  if (f.data['role'] == 0) {
+                    StaffItem item = new StaffItem(
+                        f.documentID,
+                        f.data['img'],
+                        f.data['name'],
+                        f.data['position'],
+                        f.data['type'],
+                        false,
+                        f.data['phone'],
+                        f.data['address'],
+                        f.data['email'],
+                        f.data['outlet'],
+                        '-',
+                        false);
+                    setState(() {
+                      listStaff.add(item);
+                    });
+                  } else {
+                    StaffItem item = new StaffItem(
+                        f.documentID,
+                        f.data['img'],
+                        f.data['name'],
+                        f.data['position'],
+                        f.data['type'],
+                        false,
+                        f.data['phone'],
+                        f.data['address'],
+                        f.data['email'],
+                        f.data['outlet'],
+                        f.data['enrol'],
+                        f.data['isSignin']);
+                    setState(() {
+                      listStaff.add(item);
+                    });
+                  }
+                }
+              });
+            } else {
+              if (f.data['role'] == 0) {
+                StaffItem item = new StaffItem(
+                    f.documentID,
+                    f.data['img'],
+                    f.data['name'],
+                    f.data['position'],
+                    f.data['type'],
+                    false,
+                    f.data['phone'],
+                    f.data['address'],
+                    f.data['email'],
+                    f.data['outlet'],
+                    '-',
+                    false);
+                setState(() {
+                  listStaff.add(item);
+                });
+              } else {
+                StaffItem item = new StaffItem(
+                    f.documentID,
+                    f.data['img'],
+                    f.data['name'],
+                    f.data['position'],
+                    f.data['type'],
+                    false,
+                    f.data['phone'],
+                    f.data['address'],
+                    f.data['email'],
+                    f.data['outlet'],
+                    f.data['enrol'],
+                    f.data['isSignin']);
+                setState(() {
+                  listStaff.add(item);
+                });
+              }
+            }
+          }
         });
         if (widget.action == 20) {
           if (widget.listCurrent.length > 0) {
@@ -173,7 +245,9 @@ class StaffState extends State<Staff> {
               ? Theme.of(context).backgroundColor
               : Theme.of(context).scaffoldBackgroundColor,
       appBar: AppBar(
-        title: Text(widget.action == 10 ? 'List Staff' : 'Choose Staff'),
+        title: Text(widget.action == 10
+            ? 'List Staff'
+            : widget.action == 30 ? 'Staff History' : 'Choose Staff'),
         actions: <Widget>[
           IconButton(
               icon: Icon(Ionicons.ios_search),
@@ -182,7 +256,8 @@ class StaffState extends State<Staff> {
                 for (int i = 0; i < listStaff.length; i++) {
                   user.add(listStaff[i].name);
                 }
-                showSearch(context: context, delegate: DataSearch(user, listStaff));
+                showSearch(
+                    context: context, delegate: DataSearch(user, listStaff));
               }),
         ],
       ),
@@ -202,17 +277,19 @@ class StaffState extends State<Staff> {
                     ),
                   );
                 })
-            : FloatingActionButton(
-                child: Icon(Icons.done, size: 24.0, color: Colors.white),
-                onPressed: () {
-                  List<StaffItem> listChoose = new List<StaffItem>();
-                  for (int i = 0; i < listStaff.length; i++) {
-                    if (listStaff[i].check) {
-                      listChoose.add(listStaff[i]);
-                    }
-                  }
-                  Navigator.pop(context, listChoose);
-                }),
+            : widget.action == 20
+                ? FloatingActionButton(
+                    child: Icon(Icons.done, size: 24.0, color: Colors.white),
+                    onPressed: () {
+                      List<StaffItem> listChoose = new List<StaffItem>();
+                      for (int i = 0; i < listStaff.length; i++) {
+                        if (listStaff[i].check) {
+                          listChoose.add(listStaff[i]);
+                        }
+                      }
+                      Navigator.pop(context, listChoose);
+                    })
+                : null,
         opacity: fabIsVisible ? 1 : 0,
         duration: Duration(milliseconds: 300),
       ),
@@ -235,7 +312,8 @@ class StaffState extends State<Staff> {
                                 onTap: () {
                                   if (widget.action == 10) {
                                     // _gotoDetailStaff(index);
-                                    Navigator.of(context).push(_createRoute(DetailStaff(
+                                    Navigator.of(context)
+                                        .push(_createRoute(DetailStaff(
                                       id: listStaff[index].id,
                                       name: listStaff[index].name,
                                       position: listStaff[index].position,
@@ -248,22 +326,34 @@ class StaffState extends State<Staff> {
                                       type: listStaff[index].type,
                                       signin: listStaff[index].signin,
                                     )));
-                                  } else {
+                                  } else if (widget.action == 20) {
                                     setState(() {
                                       listStaff[index].check =
                                           !listStaff[index].check;
                                     });
+                                  } else {
+                                    Navigator.of(context).push(_createRoute(
+                                        HistoryStaff(
+                                            id: listStaff[index].id,
+                                            name: listStaff[index].name)));
                                   }
                                 },
                                 leading: ClipOval(
-                                    child: FadeInImage.assetNetwork(
-                                  placeholder: 'assets/images/absenin.png',
+                                    child: CachedNetworkImage(
+                                  imageUrl: listStaff[index].img,
                                   height: 50.0,
                                   width: 50.0,
-                                  image: listStaff[index].img,
-                                  fadeInDuration: Duration(seconds: 1),
                                   fit: BoxFit.cover,
-                                )),
+                                )
+                                    //     FadeInImage.assetNetwork(
+                                    //   placeholder: 'assets/images/absenin.png',
+                                    //   height: 50.0,
+                                    //   width: 50.0,
+                                    //   image: listStaff[index].img,
+                                    //   fadeInDuration: Duration(seconds: 1),
+                                    //   fit: BoxFit.cover,
+                                    // )
+                                    ),
                                 title: Text(
                                   listStaff[index].name,
                                   style: TextStyle(fontFamily: 'Google'),
@@ -276,7 +366,8 @@ class StaffState extends State<Staff> {
                                           : 'Part Time',
                                   style: TextStyle(fontFamily: 'Sans'),
                                 ),
-                                trailing: widget.action == 10
+                                trailing: widget.action == 10 ||
+                                        widget.action == 30
                                     ? Icon(
                                         Feather.chevron_right,
                                       )
@@ -494,46 +585,46 @@ class DataSearch extends SearchDelegate<String> {
             .where((p) => p.toLowerCase().contains(query.toLowerCase()))
             .toList();
 
-    return suggestionsList != null ? ListView.builder(
-        itemCount: suggestionsList.length,
-        itemBuilder: (context, i) {
-          return ListTile(
-            onTap: () async {
-              for(int j = 0; j < listStaff.length; j++){
-                if(suggestionsList[i] == listStaff[j].name){
-                  Navigator.of(context).push(_createRoute(DetailStaff(
-                    id: listStaff[j].id,
-                    name: listStaff[j].name,
-                    position: listStaff[j].position,
-                    outlet: listStaff[j].outlet,
-                    phone: listStaff[j].phone,
-                    address: listStaff[j].address,
-                    emails: listStaff[j].email,
-                    enrol: listStaff[j].enrol,
-                    img: listStaff[j].img,
-                    type: listStaff[j].type,
-                    signin: listStaff[j].signin,
-                  )));
-                }
-              }
-            },
-            leading: Icon(
-              Icons.history,
-            ),
-            title: Text(suggestionsList[i],
-                style: TextStyle(
-                  color: Theme.of(context).textTheme.body1.color,
-                  fontFamily: 'Sans',
-                )),
-            trailing: Icon(
-              Feather.chevron_right,
-            ),
+    return suggestionsList != null
+        ? ListView.builder(
+            itemCount: suggestionsList.length,
+            itemBuilder: (context, i) {
+              return ListTile(
+                onTap: () async {
+                  for (int j = 0; j < listStaff.length; j++) {
+                    if (suggestionsList[i] == listStaff[j].name) {
+                      Navigator.of(context).push(_createRoute(DetailStaff(
+                        id: listStaff[j].id,
+                        name: listStaff[j].name,
+                        position: listStaff[j].position,
+                        outlet: listStaff[j].outlet,
+                        phone: listStaff[j].phone,
+                        address: listStaff[j].address,
+                        emails: listStaff[j].email,
+                        enrol: listStaff[j].enrol,
+                        img: listStaff[j].img,
+                        type: listStaff[j].type,
+                        signin: listStaff[j].signin,
+                      )));
+                    }
+                  }
+                },
+                leading: Icon(
+                  Icons.history,
+                ),
+                title: Text(suggestionsList[i],
+                    style: TextStyle(
+                      color: Theme.of(context).textTheme.body1.color,
+                      fontFamily: 'Sans',
+                    )),
+                trailing: Icon(
+                  Feather.chevron_right,
+                ),
+              );
+            })
+        : Center(
+            child: Text(''),
           );
-        }) : Center(
-          child: Text(
-            ''
-          ),
-        );
   }
 
   Route _createRoute(Widget destination) {
