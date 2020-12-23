@@ -30,7 +30,29 @@ class SignInState extends State<SignIn> {
   double widthCircular = 0;
   double heightCircular = 0;
   final firestore = Firestore.instance;
-  List listOutlet = ['Dazzle Gejayan', 'Dazzle Jakal'];
+  List<String> listOutlet = List<String>();
+
+  @override
+  void initState() {
+    super.initState();
+    _getOutletFromDb();
+  }
+
+  _getOutletFromDb() async {
+    //ambil list outlet
+    firestore.collection('outlet').getDocuments().then((snapshot) {
+      if (snapshot.documents.isEmpty) {
+        print('No data to display');
+      } else {
+        listOutlet.clear();
+        snapshot.documents.forEach((f) {
+          setState(() {
+            listOutlet.add(f.data['name']);
+          });
+        });
+      }
+    });
+  }
 
   String validateEmail(String email) {
     if (email.isEmpty) {
@@ -42,7 +64,7 @@ class SignInState extends State<SignIn> {
   }
 
   void checkEmail() async {
-    print('Lagi ngecek...');
+    //method ketika signin di klik
     firestore
         .collection('user')
         .document(outlet)
@@ -51,14 +73,16 @@ class SignInState extends State<SignIn> {
         .getDocuments()
         .then((data) {
       if (data.documents.isNotEmpty) {
+        //kalau email ada
         data.documents.forEach((f) {
           String id = f.documentID;
           int role = f.data['role'];
 
           if (role == 0) {
+            bool statusin = f.data['status'];
             Timer(Duration(seconds: 2), () {
-              Navigator.of(context)
-                  .push(_createRoute(PasscodeSpv(email: email, outlet: outlet,)));
+              Navigator.of(context).push(_createRoute(PasscodeSpv(
+                  id: id, email: email, outlet: outlet, status: statusin)));
               setState(() {
                 clicked = false;
                 widthCircular = 0;
@@ -67,12 +91,15 @@ class SignInState extends State<SignIn> {
               });
             });
           } else {
+            //role = 1
             String enrol = f.data['enrol'];
             print('Enrol key: $enrol');
             bool statusin = f.data['status'];
             bool isSignin = f.data['isSignin'];
             if (statusin) {
+              //statusin = true -> ketika sudah enrol
               if (!isSignin) {
+                //issignin = true -> ketika sudah berhasil bikin passcode
                 Timer(Duration(seconds: 2), () {
                   Navigator.of(context).push(_createRoute(PasscodeUser(
                     email: email,
@@ -87,6 +114,7 @@ class SignInState extends State<SignIn> {
                   });
                 });
               } else {
+                //cek kalau issignin = true, tdk bs signin lagi
                 Timer(Duration(seconds: 2), () {
                   setState(() {
                     widthCircular = 0;
@@ -99,12 +127,13 @@ class SignInState extends State<SignIn> {
                 });
               }
             } else {
+              //cek statusin = false -> enrol dulu
               Timer(Duration(seconds: 2), () {
                 Navigator.of(context).push(_createRoute(EnrollKey(
-                  email: email,
+                  email: email, //untuk di daftar ke auth
                   enrol: enrol,
                   outlet: outlet,
-                  id: id,
+                  id: id, //untuk rubah status dan signin
                 )));
                 setState(() {
                   clicked = false;
@@ -117,6 +146,7 @@ class SignInState extends State<SignIn> {
           }
         });
       } else {
+        //kalau email tidak ada atau null
         Timer(Duration(seconds: 2), () {
           setState(() {
             widthCircular = 0;
@@ -344,7 +374,7 @@ class SignInState extends State<SignIn> {
             ),
             body: SlidingUpPanel(
               minHeight: 0.0,
-              maxHeight: MediaQuery.of(context).size.height * 0.5,
+              maxHeight: MediaQuery.of(context).size.height * MediaQuery.of(context).devicePixelRatio > 1500 ? MediaQuery.of(context).size.height * 0.55 : MediaQuery.of(context).size.height * 0.65,
               backdropEnabled: true,
               borderRadius: BorderRadius.vertical(top: Radius.circular(20.0)),
               parallaxEnabled: true,
@@ -365,7 +395,7 @@ class SignInState extends State<SignIn> {
                   FocusScope.of(context).requestFocus(new FocusNode());
                 },
                 child: ClipRRect(
-                  borderRadius: BorderRadius.circular(20.0),
+                  borderRadius: BorderRadius.only(topLeft: Radius.circular(20), topRight: Radius.circular(20)),
                   child: Container(
                     color: Theme.of(context).backgroundColor,
                     padding: EdgeInsets.only(
@@ -524,18 +554,18 @@ class SignInState extends State<SignIn> {
               body: SingleChildScrollView(
                 child: Padding(
                   padding: const EdgeInsets.only(
-                      left: 25.0, right: 25.0, top: 100.0, bottom: 50.0),
+                      left: 25.0, right: 25.0, top: 70.0, bottom: 50.0),
                   child: Column(
                     children: <Widget>[
                       FadeDown(
                         1.0,
                         Image.asset(
                           'assets/images/main.png',
-                          width: MediaQuery.of(context).size.width * 0.70,
+                          width: MediaQuery.of(context).size.width * 0.6,
                         ),
                       ),
                       SizedBox(
-                        height: 80.0,
+                        height: 60.0,
                       ),
                       FadeDown(
                         1.5,
@@ -543,7 +573,7 @@ class SignInState extends State<SignIn> {
                           'Absenin',
                           style: TextStyle(
                             fontSize:
-                                Theme.of(context).textTheme.display1.fontSize,
+                                Theme.of(context).textTheme.headline4.fontSize,
                             fontFamily: 'Google',
                           ),
                           textAlign: TextAlign.center,
@@ -576,7 +606,7 @@ class SignInState extends State<SignIn> {
                                 _showOutletDialog();
                               },
                               child: Text(
-                                'Start Trial',
+                                'Start',
                                 style: TextStyle(
                                     fontSize: 16.0,
                                     color: Colors.white,

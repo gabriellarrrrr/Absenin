@@ -19,6 +19,7 @@ class SplashScreenState extends State<SplashScreen> {
   final Firestore firestore = Firestore.instance;
   int role = 0;
   String outlet;
+  bool status;
 
   @override
   void initState() {
@@ -29,40 +30,51 @@ class SplashScreenState extends State<SplashScreen> {
   _getCurrentUser() async {
     FirebaseUser currentUser = await auth.currentUser();
     if (currentUser != null) {
+      //cek sudah ada di auth belum -> sudah
       if (role == 0) {
+        //cek role
         Timer(Duration(seconds: 1), () {
           Navigator.of(context).pushReplacement(_createRoute(PasscodeSpv(
             email: currentUser.email,
             outlet: outlet,
+            status: status,
           )));
         });
       } else {
+        //role = 1
         await firestore
-        .collection('user')
-        .document(outlet)
-        .collection('listuser')
-        .where('email', isEqualTo: currentUser.email).getDocuments().then((snapshot){
-          if(snapshot.documents.isNotEmpty){
+            .collection('user')
+            .document(outlet)
+            .collection('listuser')
+            .where('email', isEqualTo: currentUser.email)
+            .getDocuments()
+            .then((snapshot) {
+          if (snapshot.documents.isNotEmpty) {
             snapshot.documents.forEach((f) async {
-              if(f.data['delete']){
-                await currentUser.delete();
-                if(mounted){
+              if (f.data['delete']) {
+                //kalau delete true
+                await currentUser.delete(); //delete dr auth
+                if (mounted) {
                   await firestore
-                  .collection('user')
-                  .document(outlet)
-                  .collection('listuser')
-                  .document(f.documentID).delete();
-                  if(mounted){
+                      .collection('user')
+                      .document(outlet)
+                      .collection('listuser')
+                      .document(f.documentID)
+                      .delete(); //delete database
+                  if (mounted) {
                     Timer(Duration(seconds: 1), () {
-                      Navigator.of(context).pushReplacement(_createRoute(SignIn()));
+                      Navigator.of(context)
+                          .pushReplacement(_createRoute(SignIn()));
                     });
                   }
                 }
               } else {
+                //kalau delete = false
                 Timer(Duration(seconds: 1), () {
-                  Navigator.of(context).pushReplacement(_createRoute(PasscodeUser(
+                  Navigator.of(context)
+                      .pushReplacement(_createRoute(PasscodeUser(
                     email: currentUser.email,
-                    action: 10,
+                    action: 10, //aksi passcode dr splash udah pernah login
                     outlet: outlet,
                   )));
                 });
@@ -72,6 +84,7 @@ class SplashScreenState extends State<SplashScreen> {
         });
       }
     } else {
+      //currentuser = null
       Timer(Duration(seconds: 2), () {
         Navigator.of(context).pushReplacement(_createRoute(SignIn()));
       });
@@ -83,6 +96,7 @@ class SplashScreenState extends State<SplashScreen> {
     setState(() {
       role = prefs.getInt('roleUser');
       outlet = prefs.getString('outletUser');
+      status = prefs.getBool('status');
       _getCurrentUser();
     });
   }
@@ -102,6 +116,7 @@ class SplashScreenState extends State<SplashScreen> {
   }
 
   Route _createRoute(Widget destination) {
+    //efek pindah halaman
     return PageRouteBuilder(
       transitionDuration: Duration(milliseconds: 500),
       pageBuilder: (context, animation, secondaryAnimation) => destination,
